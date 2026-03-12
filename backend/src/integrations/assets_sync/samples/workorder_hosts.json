@@ -1,0 +1,38 @@
+[
+  {
+    "source": "Manual",
+    "external_id": "workorder:10.30.1.5",
+    "name": "payment-worker-01",
+    "system_name": "支付调度",
+    "status": "synced",
+    "metadata": {
+      "asset_type": "workorder-host",
+      "ip": "10.30.1.5",
+      "idc": "北京亦庄",
+      "proxy": "itsi-bj-proxy",
+      "port": 8080,
+      "alert_contacts": ["001234"],
+      "hostname": "payment-worker-01",
+      "app_system": "支付调度",
+      "owner": "陈七"
+    }
+  },
+  {
+    "source": "Manual",
+    "external_id": "workorder:10.30.2.9",
+    "name": "payment-worker-02",
+    "system_name": "支付调度",
+    "status": "synced",
+    "metadata": {
+      "asset_type": "workorder-host",
+      "ip": "10.30.2.9",
+      "idc": "上海张江",
+      "proxy": "itsi-sh-proxy",
+      "port": 8080,
+      "alert_contacts": ["001235", "001236"],
+      "hostname": "payment-worker-02",
+      "app_system": "支付调度",
+      "owner": "陈七"
+    }
+  }
+]

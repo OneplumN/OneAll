@@ -1,0 +1,99 @@
+[
+  {
+    "source": "Zabbix",
+    "external_id": "zbx:10084",
+    "name": "Zabbix server",
+    "system_name": "",
+    "status": "disabled",
+    "metadata": {
+      "asset_type": "zabbix-host",
+      "host_status": "1",
+      "host_status_label": "停用",
+      "status": "1",
+      "host_id": "10084",
+      "host_name": "Zabbix server",
+      "host_groups": [
+        "Zabbix servers"
+      ],
+      "ip": "127.0.0.1",
+      "interfaces": [
+        {
+          "interfaceid": "1",
+          "ip": "127.0.0.1",
+          "available": "2",
+          "type": "1",
+          "port": "10050",
+          "dns": "",
+          "useip": "1"
+        }
+      ],
+      "interface_type": "1",
+      "interface_type_label": "Agent",
+      "interface_available": "2",
+      "interface_available_label": "不可用"
+    }
+  },
+  {
+    "source": "Zabbix",
+    "external_id": "zbx:10634",
+    "name": "txy",
+    "system_name": "",
+    "status": "synced",
+    "metadata": {
+      "asset_type": "zabbix-host",
+      "host_id": "10634",
+      "host_name": "txy",
+      "host_groups": [
+        "Discovered hosts",
+        "Zabbix servers"
+      ],
+      "ip": "101.43.54.131",
+      "interfaces": [
+        {
+          "interfaceid": "31",
+          "ip": "101.43.54.131",
+          "available": "1",
+          "type": "1",
+          "port": "10050",
+          "dns": "",
+          "useip": "1"
+        }
+      ],
+      "interface_type": "1",
+      "interface_type_label": "Agent",
+      "interface_available": "1",
+      "interface_available_label": "可用"
+    }
+  },
+  {
+    "source": "Zabbix",
+    "external_id": "zbx:10635",
+    "name": "aliyun",
+    "system_name": "",
+    "status": "synced",
+    "metadata": {
+      "asset_type": "zabbix-host",
+      "host_id": "10635",
+      "host_name": "aliyun",
+      "host_groups": [
+        "test"
+      ],
+      "ip": "119.23.146.171",
+      "interfaces": [
+        {
+          "interfaceid": "32",
+          "ip": "119.23.146.171",
+          "available": "1",
+          "type": "1",
+          "port": "10050",
+          "dns": "",
+          "useip": "1"
+        }
+      ],
+      "interface_type": "1",
+      "interface_type_label": "Agent",
+      "interface_available": "1",
+      "interface_available_label": "可用"
+    }
+  }
+]

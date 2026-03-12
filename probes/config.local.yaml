@@ -1,0 +1,17 @@
+api_base_url: "http://127.0.0.1:8000"
+node_id: "3dc298a0-7a8b-4881-a103-747ddff0f718"
+api_token: "itsi@2025-LOCAL-probe"
+grpc_gateway: "127.0.0.1:5443"
+grpc_insecure: true
+
+heartbeat_interval: 30
+task_poll_interval: 15
+request_timeout: 10
+insecure_skip_tls: false    # 如果网关或 API 自签证书，可临时切 true
+max_concurrent_tasks: 4
+task_retry_limit: 2
+
+metrics_addr: ":9100"       # 想在本地暴露 /probe/metrics 就保留
+result_cache_path: "/tmp/oneall-probe/cache/results.json"
+result_cache_limit: 200
+update_dir: "/tmp/oneall-probe/updates"

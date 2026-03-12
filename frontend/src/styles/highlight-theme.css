@@ -1,0 +1,57 @@
+.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 1rem;
+  background: #1e1e1e;
+  color: #abb2bf;
+  font-family: 'Fira Code', 'SFMono-Regular', Consolas, monospace;
+  border-radius: 12px;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: #5c6370;
+}
+
+.hljs-variable,
+.hljs-template-variable,
+.hljs-attribute,
+.hljs-tag,
+.hljs-name,
+.hljs-regexp,
+.hljs-link,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: #e06c75;
+}
+
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-literal,
+.hljs-type,
+.hljs-params {
+  color: #d19a66;
+}
+
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet {
+  color: #98c379;
+}
+
+.hljs-subst,
+.hljs-title,
+.hljs-section,
+.hljs-keyword,
+.hljs-selector-tag {
+  color: #61afef;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 600;
+}

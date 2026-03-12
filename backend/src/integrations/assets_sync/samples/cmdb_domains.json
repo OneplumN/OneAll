@@ -1,0 +1,36 @@
+[
+  {
+    "source": "CMDB",
+    "external_id": "domain:ops.oneall.cn",
+    "name": "ops.oneall.cn",
+    "system_name": "OneAll 智能运维平台",
+    "owners": ["张三"],
+    "contacts": ["000123"],
+    "status": "synced",
+    "metadata": {
+      "asset_type": "cmdb-domain",
+      "domain": "ops.oneall.cn",
+      "network_type": "internet",
+      "owner": "张三",
+      "alert_contacts": ["000123"],
+      "system_name": "OneAll 智能运维平台"
+    }
+  },
+  {
+    "source": "CMDB",
+    "external_id": "domain:intra.oneall.local",
+    "name": "intra.oneall.local",
+    "system_name": "内部调度系统",
+    "owners": ["李四"],
+    "contacts": ["000234", "000235"],
+    "status": "synced",
+    "metadata": {
+      "asset_type": "cmdb-domain",
+      "domain": "intra.oneall.local",
+      "network_type": "internal",
+      "owner": "李四",
+      "alert_contacts": ["000234", "000235"],
+      "system_name": "内部调度系统"
+    }
+  }
+]

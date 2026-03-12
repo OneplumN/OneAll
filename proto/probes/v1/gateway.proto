@@ -1,0 +1,145 @@
+syntax = "proto3";
+
+package onepro.probes.v1;
+
+option go_package = "github.com/one-pro/one-pro/probes/internal/probes/v1;gateway";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+message HeartbeatStats {
+  uint64 sent = 1;
+  uint64 failed = 2;
+  google.protobuf.Timestamp last_success = 3;
+}
+
+message TaskStats {
+  uint64 fetched = 1;
+  uint64 executed = 2;
+  uint64 failed = 3;
+}
+
+message QueueStats {
+  uint64 depth = 1;
+  uint64 capacity = 2;
+}
+
+message WorkerStats {
+  uint64 active = 1;
+}
+
+message ProbeHello {
+  string probe_id = 1;
+  string token = 2;
+  repeated string supported_protocols = 3;
+  uint32 max_concurrency = 4;
+  string agent_version = 5;
+  string region = 6;
+}
+
+message HelloAck {
+  string probe_id = 1;
+  uint32 heartbeat_interval_seconds = 2;
+  uint32 max_concurrency = 3;
+  string message = 4;
+}
+
+message Heartbeat {
+  google.protobuf.Timestamp sent_at = 1;
+  string status = 2;
+  double cpu_usage = 3;
+  double memory_usage_mb = 4;
+  uint32 queue_depth = 5;
+  uint32 active_tasks = 6;
+  string ip_address = 7;
+}
+
+message RuntimeMetrics {
+  google.protobuf.Timestamp captured_at = 1;
+  uint64 uptime_seconds = 2;
+  HeartbeatStats heartbeats = 3;
+  TaskStats tasks = 4;
+  QueueStats queue = 5;
+  WorkerStats workers = 6;
+}
+
+message TaskPullRequest {
+  uint32 limit = 1;
+}
+
+message TaskDispatch {
+  string task_id = 1;
+  string schedule_id = 2;
+  string target = 3;
+  string protocol = 4;
+  uint32 timeout_seconds = 5;
+  repeated int32 expected_status_codes = 6;
+  google.protobuf.Struct metadata = 7;
+}
+
+message TaskResult {
+  string task_id = 1;
+  string schedule_id = 2;
+  string protocol = 3;
+  string status = 4;
+  uint32 status_code = 5;
+  uint32 response_time_ms = 6;
+  string message = 7;
+  google.protobuf.Struct metadata = 8;
+  google.protobuf.Timestamp finished_at = 9;
+  google.protobuf.Timestamp scheduled_at = 10;
+}
+
+message ControlCommand {
+  string command = 1;
+  google.protobuf.Struct payload = 2;
+}
+
+message ScheduleConfig {
+  string schedule_id = 1;
+  string target = 2;
+  string protocol = 3;
+  google.protobuf.Timestamp start_at = 4;
+  google.protobuf.Timestamp end_at = 5;
+  uint32 interval_seconds = 6;
+  uint32 timeout_seconds = 7;
+  google.protobuf.Struct metadata = 8;
+  uint64 version = 9;
+  bool paused = 10;
+}
+
+message ConfigUpdate {
+  uint64 version = 1;
+  repeated ScheduleConfig schedules = 2;
+  repeated string removed_schedule_ids = 3;
+  bool full_resync = 4;
+}
+
+message ConfigAck {
+  uint64 version = 1;
+  repeated string applied_schedule_ids = 2;
+}
+
+message ProbeMessage {
+  oneof body {
+    ProbeHello hello = 1;
+    Heartbeat heartbeat = 2;
+    TaskResult result = 3;
+    TaskPullRequest task_request = 4;
+    RuntimeMetrics metrics = 5;
+    ConfigAck config_ack = 6;
+  }
+}
+
+message ServerMessage {
+  oneof body {
+    HelloAck ack = 1;
+    TaskDispatch task = 2;
+    ControlCommand command = 3;
+    ConfigUpdate config_update = 4;
+  }
+}
+
+service ProbeGateway {
+  rpc Connect(stream ProbeMessage) returns (stream ServerMessage);
+}

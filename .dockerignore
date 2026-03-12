@@ -1,0 +1,24 @@
+# Source control
+.git
+.gitignore
+
+# Dependencies & caches
+node_modules/
+__pycache__/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build outputs & logs
+dist/
+build/
+coverage/
+*.log*
+.env*
+
+# Docker artifacts
+Dockerfile*
+.dockerignore

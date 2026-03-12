@@ -1,0 +1,231 @@
+version: '3.9'
+
+services:
+  # ============ 数据库服务 ============
+  mysql:
+    image: mysql:8.0
+    container_name: oneall-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-oneall123}
+      MYSQL_DATABASE: oneall
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command: ["mysqld", "--default-authentication-plugin=mysql_native_password", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  timescaledb:
+    image: timescale/timescaledb:2.12.0-pg14
+    container_name: oneall-timescaledb
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${TIMESCALE_PASSWORD:-oneall123}
+      POSTGRES_DB: oneall_metrics
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+      - ./deploy/docker/init-timescale.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: oneall-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============ 后端服务 ============
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: oneall-backend
+    restart: unless-stopped
+    environment:
+      DEBUG: "False"
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
+      ALLOWED_HOSTS: "*"
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DB: oneall
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-oneall123}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      TIMESCALE_HOST: timescaledb
+      TIMESCALE_PORT: 5432
+      TIMESCALE_DB: oneall_metrics
+      TIMESCALE_USER: postgres
+      TIMESCALE_PASSWORD: ${TIMESCALE_PASSWORD:-oneall123}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:80}
+    expose:
+      - "8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "
+        python manage.py migrate --noinput &&
+        gunicorn core.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120
+      "
+
+  # gRPC Gateway - 探针通信网关
+  grpc-gateway:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: oneall-grpc-gateway
+    restart: unless-stopped
+    environment:
+      DEBUG: "False"
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DB: oneall
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-oneall123}
+      REDIS_URL: redis://redis:6379/0
+      TIMESCALE_HOST: timescaledb
+      TIMESCALE_PORT: 5432
+      TIMESCALE_DB: oneall_metrics
+      TIMESCALE_USER: postgres
+      TIMESCALE_PASSWORD: ${TIMESCALE_PASSWORD:-oneall123}
+    ports:
+      - "50051:50051"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["python", "manage.py", "run_probe_gateway", "--host", "0.0.0.0", "--port", "50051"]
+
+  # Celery Worker - 异步任务执行
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: oneall-celery-worker
+    restart: unless-stopped
+    environment:
+      DEBUG: "False"
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DB: oneall
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-oneall123}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      TIMESCALE_HOST: timescaledb
+      TIMESCALE_PORT: 5432
+      TIMESCALE_DB: oneall_metrics
+      TIMESCALE_USER: postgres
+      TIMESCALE_PASSWORD: ${TIMESCALE_PASSWORD:-oneall123}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["celery", "-A", "core.celery_app", "worker", "-l", "info"]
+
+  # Celery Beat - 定时任务调度
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: oneall-celery-beat
+    restart: unless-stopped
+    environment:
+      DEBUG: "False"
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DB: oneall
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-oneall123}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      TIMESCALE_HOST: timescaledb
+      TIMESCALE_PORT: 5432
+      TIMESCALE_DB: oneall_metrics
+      TIMESCALE_USER: postgres
+      TIMESCALE_PASSWORD: ${TIMESCALE_PASSWORD:-oneall123}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["celery", "-A", "core.celery_app", "beat", "-l", "info"]
+
+  # ============ 前端服务 ============
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+    container_name: oneall-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+  # ============ 探针服务 ============
+  probe:
+    build:
+      context: ./probes
+      dockerfile: Dockerfile
+    container_name: oneall-probe
+    restart: unless-stopped
+    environment:
+      # 这些环境变量会覆盖 config.yaml 中的配置
+      PROBE_API_BASE_URL: http://backend:8000
+      PROBE_GRPC_GATEWAY: grpc-gateway:50051
+      PROBE_GRPC_INSECURE: "true"
+      PROBE_NODE_ID: ${PROBE_NODE_ID:-}
+      PROBE_API_TOKEN: ${PROBE_API_TOKEN:-}
+    volumes:
+      - ./deploy/docker/probe-config.yaml:/app/config.yaml:ro
+      - probe_data:/var/lib/oneall-probe
+    depends_on:
+      - backend
+      - grpc-gateway
+    # 探针默认不自动启动，需要先在界面注册获取 node_id 和 token
+    profiles:
+      - probe
+
+volumes:
+  mysql_data:
+  timescaledb_data:
+  redis_data:
+  probe_data:

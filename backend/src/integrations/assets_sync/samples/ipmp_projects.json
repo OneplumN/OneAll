@@ -1,0 +1,36 @@
+[
+  {
+    "source": "IPMP",
+    "external_id": "APP-OPS-001",
+    "name": "OneAll 运维门户",
+    "system_name": "OneAll 运维门户",
+    "status": "synced",
+    "metadata": {
+      "asset_type": "ipmp-project",
+      "app_code": "APP-OPS-001",
+      "app_name_cn": "OneAll 运维门户",
+      "app_name_en": "OneAll Ops",
+      "app_status": "运行中",
+      "owner": "王五",
+      "security_level": "二级",
+      "system_origin": "自研"
+    }
+  },
+  {
+    "source": "IPMP",
+    "external_id": "APP-BILL-002",
+    "name": "结算引擎",
+    "system_name": "结算引擎",
+    "status": "synced",
+    "metadata": {
+      "asset_type": "ipmp-project",
+      "app_code": "APP-BILL-002",
+      "app_name_cn": "结算引擎",
+      "app_name_en": "Billing Engine",
+      "app_status": "在研",
+      "owner": "赵六",
+      "security_level": "三级",
+      "system_origin": "外采"
+    }
+  }
+]

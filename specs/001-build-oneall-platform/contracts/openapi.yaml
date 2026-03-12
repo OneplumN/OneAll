@@ -1,0 +1,2089 @@
+openapi: 3.0.3
+info:
+  title: OneAll Platform API
+  version: 0.1.0
+  description: |
+    REST API for OneAll 智能运维平台，覆盖探针、拨测、审批、资产、工具库、知识库与集成中心能力。
+servers:
+  - url: https://api.oneall.internal/v1
+    description: Production
+  - url: https://staging-api.oneall.internal/v1
+    description: Staging
+tags:
+  - name: Auth
+  - name: Probe
+  - name: Detection
+  - name: Dashboard
+  - name: Monitoring
+  - name: Assets
+  - name: Analytics
+  - name: Tools
+  - name: Knowledge
+  - name: Integrations
+  - name: Settings
+  - name: Audit
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: 用户登录并获取访问令牌
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: 凭据无效
+
+  /probes/nodes/:
+    get:
+      tags: [Probe]
+      summary: 列出探针节点
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [online, offline, maintenance]
+        - in: query
+          name: region
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 节点列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProbeNode'
+    post:
+      tags: [Probe]
+      summary: 注册新探针节点
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProbeNodeCreate'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeNode'
+
+  /detection/one-off:
+    post:
+      tags: [Detection]
+      summary: 发起一次性拨测
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OneOffDetectionRequest'
+      responses:
+        '202':
+          description: 拨测已调度
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetectionTask'
+
+  /detection/tasks/{id}:
+    get:
+      tags: [Detection]
+      summary: 查询拨测任务详情
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '200':
+          description: 拨测详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetectionTask'
+
+  /dashboard/overview/:
+    get:
+      tags: [Dashboard]
+      summary: 获取概览指标
+      responses:
+        '200':
+          description: 概览指标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardOverview'
+
+  /dashboard/alerts-summary/:
+    get:
+      tags: [Dashboard]
+      summary: 获取近期告警摘要
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+          description: 返回的告警条目数量（默认 5）
+      responses:
+        '200':
+          description: 告警摘要
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardAlertSummary'
+
+  /dashboard/todos/:
+    get:
+      tags: [Dashboard]
+      summary: 获取待办事项列表
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+          description: 每个类别返回的待办条目数量（默认 5）
+      responses:
+        '200':
+          description: 待办事项汇总
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardTodoSummary'
+
+  /dashboard/detection-grid/:
+    get:
+      tags: [Dashboard]
+      summary: 获取域名拨测蜂窝图数据
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+          description: 返回的任务数量（默认 50）
+      responses:
+        '200':
+          description: 拨测任务状态列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DashboardDetectionGridItem'
+
+  /dashboard/certificate-alerts/:
+    get:
+      tags: [Dashboard]
+      summary: 获取证书有效期告警
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          description: 返回的证书条目数量（默认 12）
+      responses:
+        '200':
+          description: 证书告警摘要
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardCertificateAlerts'
+
+  /settings/system:
+    get:
+      tags: [Settings]
+      summary: 获取系统设置
+      responses:
+        '200':
+          description: 当前系统设置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemSettings'
+    put:
+      tags: [Settings]
+      summary: 更新系统设置
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SystemSettingsUpdate'
+      responses:
+        '200':
+          description: 更新后的系统设置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemSettings'
+        '204':
+          description: 更新成功，无额外内容
+
+  /monitoring/requests:
+    get:
+      tags: [Monitoring]
+      summary: 查询拨测申请列表
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, approved, rejected, cancelled]
+        - in: query
+          name: domain
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 申请列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MonitoringRequest'
+    post:
+      tags: [Monitoring]
+      summary: 创建拨测申请（平台内审批）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonitoringRequestCreate'
+      responses:
+        '201':
+          description: 申请已提交
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringRequest'
+
+  /monitoring/requests/{id}:
+    get:
+      tags: [Monitoring]
+      summary: 获取拨测申请详情
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: 申请详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringRequest'
+    patch:
+      tags: [Monitoring]
+      summary: 修改拨测申请（仅驳回后允许）
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonitoringRequestUpdate'
+      responses:
+        '200':
+          description: 修改成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringRequest'
+
+  /audit/logs:
+    get:
+      tags: [Audit]
+      summary: 查询操作与访问日志
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+          description: 页码，默认 1
+        - in: query
+          name: page_size
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          description: 每页条数，默认 20
+        - in: query
+          name: actor
+          schema:
+            type: string
+            format: uuid
+          description: 过滤指定操作者
+        - in: query
+          name: action
+          schema:
+            type: string
+          description: 模糊匹配操作名称
+        - in: query
+          name: target_type
+          schema:
+            type: string
+          description: 过滤目标类型
+        - in: query
+          name: start
+          schema:
+            type: string
+            format: date-time
+          description: 开始时间（ISO8601）
+        - in: query
+          name: end
+          schema:
+            type: string
+            format: date-time
+          description: 结束时间（ISO8601）
+      responses:
+        '200':
+          description: 操作日志分页结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogListResponse'
+
+  /monitoring/requests/{id}/approve:
+    post:
+      tags: [Monitoring]
+      summary: 审批通过（系统管理员）
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: 已通过并创建调度
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringRequest'
+
+  /monitoring/requests/{id}/reject:
+    post:
+      tags: [Monitoring]
+      summary: 审批驳回（系统管理员）
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: 驳回原因
+      responses:
+        '200':
+          description: 已驳回
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringRequest'
+
+  /monitoring/requests/{id}/resubmit:
+    post:
+      tags: [Monitoring]
+      summary: 重新提交已驳回的申请
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: 已重新提交，等待审批
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringRequest'
+
+  /monitoring/tasks/history:
+    get:
+      tags: [Monitoring]
+      summary: 查询拨测历史记录
+      parameters:
+        - in: query
+          name: target
+          schema:
+            type: string
+          description: 目标域名或关键字模糊匹配
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [scheduled, running, succeeded, failed, timeout]
+          description: 拨测任务状态
+        - in: query
+          name: protocol
+          schema:
+            type: string
+            enum: [HTTP, HTTPS, Telnet, WSS, TCP, CERTIFICATE]
+          description: 拨测协议过滤
+        - in: query
+          name: probe_id
+          schema:
+            type: string
+            format: uuid
+          description: 指定探针节点
+        - in: query
+          name: started_after
+          schema:
+            type: string
+            format: date-time
+          description: 仅包含该时间之后执行的记录
+        - in: query
+          name: started_before
+          schema:
+            type: string
+            format: date-time
+          description: 仅包含该时间之前执行的记录
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: page_size
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: 拨测历史列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringHistoryResponse'
+        '400':
+          description: 参数校验失败
+
+  /assets/records:
+    get:
+      tags: [Assets]
+      summary: 查询资产记录
+      parameters:
+        - in: query
+          name: source
+          schema:
+            type: string
+            enum: [domain, zabbix, ipmp, workorder]
+        - in: query
+          name: keyword
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 资产列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AssetRecord'
+
+  /assets/records/{record_id}:
+    patch:
+      tags: [Assets]
+      summary: 更新资产记录（工单纳管主机）
+      parameters:
+        - in: path
+          name: record_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetRecordUpdateRequest'
+      responses:
+        '200':
+          description: 更新后的资产记录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetRecord'
+
+  /assets/sync:
+    post:
+      tags: [Assets]
+      summary: 手动触发资产同步
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetSyncRequest'
+      responses:
+        '200':
+          description: 同步已完成（同步模式）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetSyncTriggerResponse'
+        '202':
+          description: 同步任务已排队
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetSyncTriggerResponse'
+
+  /assets/sync/runs:
+    get:
+      tags: [Assets]
+      summary: 查询资产同步历史
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: mode
+          schema:
+            type: string
+            enum: [sync, async]
+      responses:
+        '200':
+          description: 同步历史列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetSyncRunListResponse'
+
+  /assets/sync/runs/{run_id}:
+    get:
+      tags: [Assets]
+      summary: 查询资产同步详情
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: include_changes
+          schema:
+            type: boolean
+            default: false
+        - in: query
+          name: changes_limit
+          schema:
+            type: integer
+            default: 200
+      responses:
+        '200':
+          description: 同步详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetSyncRunDetailResponse'
+
+  /analytics/reports/detection:
+    get:
+      tags: [Analytics]
+      summary: 拨测统计报表
+      parameters:
+        - in: query
+          name: days
+          schema:
+            type: integer
+            default: 30
+            minimum: 1
+            maximum: 365
+      responses:
+        '200':
+          description: 报表数据
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /analytics/assets/overview:
+    get:
+      tags: [Analytics]
+      summary: 资产监控治理统计概览
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 500
+      responses:
+        '200':
+          description: 治理统计概览
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /analytics/assets/proxy-hosts:
+    get:
+      tags: [Analytics]
+      summary: 按 Zabbix Proxy 查询主机明细
+      parameters:
+        - in: query
+          name: proxy
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: keyword
+          schema:
+            type: string
+        - in: query
+          name: only_abnormal
+          schema:
+            type: boolean
+            default: false
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 200
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: 主机明细
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /tools/definitions:
+    get:
+      tags: [Tools]
+      summary: 列出工具定义
+      responses:
+        '200':
+          description: 工具列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ToolDefinition'
+    post:
+      tags: [Tools]
+      summary: 创建工具定义
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolDefinitionCreate'
+      responses:
+        '201':
+          description: 创建成功
+
+  /tools/definitions/{id}/versions:
+    post:
+      tags: [Tools]
+      summary: 上传脚本版本
+      parameters:
+        - $ref: '#/components/parameters/ToolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScriptVersionCreate'
+      responses:
+        '201':
+          description: 新版本已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolDefinition'
+
+  /tools/definitions/{id}/execute:
+    post:
+      tags: [Tools]
+      summary: 触发工具执行
+      parameters:
+        - $ref: '#/components/parameters/ToolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolExecutionRequest'
+      responses:
+        '202':
+          description: 执行已调度
+
+  /tools/executions:
+    get:
+      tags: [Tools]
+      summary: 查询工具执行记录
+      responses:
+        '200':
+          description: 执行记录列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ToolExecution'
+
+  /tools/repository/upload:
+    post:
+      tags: [Tools]
+      summary: 上传脚本新版本
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/ScriptVersionCreate'
+                - type: object
+                  required: [tool_id]
+                  properties:
+                    tool_id:
+                      type: string
+                      format: uuid
+      responses:
+        '201':
+          description: 新版本已上传
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolDefinition'
+
+  /tools/repository/rollback:
+    post:
+      tags: [Tools]
+      summary: 回滚工具到指定版本
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tool_id, version_id]
+              properties:
+                tool_id:
+                  type: string
+                  format: uuid
+                version_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: 已回滚
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolDefinition'
+
+  /knowledge/articles:
+    get:
+      tags: [Knowledge]
+      summary: 搜索知识库文章
+      parameters:
+        - in: query
+          name: keyword
+          schema:
+            type: string
+        - in: query
+          name: tag
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 搜索结果
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/KnowledgeArticle'
+    post:
+      tags: [Knowledge]
+      summary: 创建知识库文章
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KnowledgeArticleCreate'
+      responses:
+        '201':
+          description: 创建成功
+
+  /knowledge/articles/{slug}:
+    get:
+      tags: [Knowledge]
+      summary: 获取知识库文章详情
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 文章详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeArticle'
+    put:
+      tags: [Knowledge]
+      summary: 更新知识库文章
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KnowledgeArticleCreate'
+      responses:
+        '200':
+          description: 更新成功
+
+  /settings/plugins/:
+    get:
+      tags: [Settings]
+      summary: 查询插件配置
+      responses:
+        '200':
+          description: 插件列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PluginConfig'
+    post:
+      tags: [Settings]
+      summary: 创建插件配置
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PluginConfig'
+      responses:
+        '201':
+          description: 创建成功
+
+  /settings/plugins/{id}/:
+    get:
+      tags: [Settings]
+      summary: 获取插件配置详情
+      parameters:
+        - $ref: '#/components/parameters/PluginId'
+      responses:
+        '200':
+          description: 插件配置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PluginConfig'
+    patch:
+      tags: [Settings]
+      summary: 更新插件配置（启停/配置）
+      parameters:
+        - $ref: '#/components/parameters/PluginId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PluginConfig'
+    delete:
+      tags: [Settings]
+      summary: 删除插件配置
+      parameters:
+        - $ref: '#/components/parameters/PluginId'
+      responses:
+        '204':
+          description: 删除成功
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    NodeId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TaskId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RequestId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    JobId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ToolId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PluginId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ArticleId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+    LoginResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        expires_in:
+          type: integer
+    ProbeNode:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        location:
+          type: string
+        network_type:
+          type: string
+          enum: [internal, external]
+        supported_protocols:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [online, offline, maintenance]
+        last_heartbeat_at:
+          type: string
+          format: date-time
+    ProbeNodeCreate:
+      type: object
+      required: [name, location, network_type, supported_protocols]
+      properties:
+        name:
+          type: string
+        location:
+          type: string
+        network_type:
+          type: string
+          enum: [internal, external]
+        supported_protocols:
+          type: array
+          items:
+            type: string
+    HeartbeatPayload:
+      type: object
+      required: [status, metrics]
+      properties:
+        status:
+          type: string
+          enum: [online, offline, maintenance]
+        metrics:
+          type: object
+          additionalProperties:
+            type: number
+    OneOffDetectionRequest:
+      type: object
+      required: [target, protocol, probes]
+      properties:
+        target:
+          type: string
+        protocol:
+          type: string
+          enum: [HTTP, HTTPS, Telnet, WSS, Custom]
+        probes:
+          type: array
+          items:
+            type: string
+            format: uuid
+        options:
+          type: object
+    DetectionTask:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        target:
+          type: string
+        protocol:
+          type: string
+        probe_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [scheduled, running, succeeded, failed, timeout]
+        response_time_ms:
+          type: integer
+        status_code:
+          type: string
+        certificate_expiry:
+          type: string
+          format: date
+        log_trace:
+          type: string
+        executed_at:
+          type: string
+          format: date-time
+    ProbeNodeSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        location:
+          type: string
+        network_type:
+          type: string
+        status:
+          type: string
+    MonitoringHistoryItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        target:
+          type: string
+        protocol:
+          type: string
+        status:
+          type: string
+        response_time_ms:
+          type: integer
+          nullable: true
+        status_code:
+          type: string
+        executed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        probe:
+          $ref: '#/components/schemas/ProbeNodeSummary'
+      required: [id, target, protocol, status, created_at]
+    MonitoringHistoryAggregates:
+      type: object
+      properties:
+        total_count:
+          type: integer
+        status_counts:
+          type: object
+          additionalProperties:
+            type: integer
+        average_response_time_ms:
+          type: number
+          format: float
+          nullable: true
+        success_rate:
+          type: number
+          format: float
+          nullable: true
+    MonitoringHistoryPagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total_items:
+          type: integer
+        total_pages:
+          type: integer
+      required: [page, page_size, total_items, total_pages]
+    MonitoringHistoryResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitoringHistoryItem'
+        aggregates:
+          $ref: '#/components/schemas/MonitoringHistoryAggregates'
+        pagination:
+          $ref: '#/components/schemas/MonitoringHistoryPagination'
+      required: [items, aggregates, pagination]
+    MonitoringRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        target:
+          type: string
+        protocol:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, rejected, cancelled]
+        frequency_minutes:
+          type: integer
+        schedule_cron:
+          type: string
+        itsm_ticket_id:
+          type: string
+        metadata:
+          type: object
+        expected_status_codes:
+          type: array
+          items:
+            type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        jobs:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitoringJob'
+    MonitoringRequestCreate:
+      type: object
+      required: [title, target, protocol]
+      properties:
+        title:
+          type: string
+        target:
+          type: string
+        system_name:
+          type: string
+        network_type:
+          type: string
+          enum: [internal, internet]
+        owner_name:
+          type: string
+        alert_contacts:
+          type: array
+          items:
+            type: string
+        protocol:
+          type: string
+          enum: [HTTP, HTTPS, Telnet, WSS, CERTIFICATE]
+        frequency_minutes:
+          type: integer
+        probe_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        alert_threshold:
+          type: integer
+        expected_status_codes:
+          type: array
+          items:
+            type: integer
+    MonitoringRequestUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        target:
+          type: string
+        system_name:
+          type: string
+        network_type:
+          type: string
+          enum: [internal, internet]
+        owner_name:
+          type: string
+        alert_contacts:
+          type: array
+          items:
+            type: string
+        protocol:
+          type: string
+          enum: [HTTP, HTTPS, Telnet, WSS, CERTIFICATE]
+        frequency_minutes:
+          type: integer
+        probe_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        alert_threshold:
+          type: integer
+        expected_status_codes:
+          type: array
+          items:
+            type: integer
+    MonitoringJob:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        schedule_cron:
+          type: string
+        frequency_minutes:
+          type: integer
+        last_run_at:
+          type: string
+          format: date-time
+          nullable: true
+        next_run_at:
+          type: string
+          format: date-time
+          nullable: true
+    AssetRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum: [domain, zabbix, ipmp, workorder]
+        external_id:
+          type: string
+        name:
+          type: string
+        system_name:
+          type: string
+        network_type:
+          type: string
+        owners:
+          type: array
+          items:
+            type: string
+        synced_at:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+    AssetRecordUpdateRequest:
+      type: object
+      description: 资产更新请求（仅用于工单纳管主机信息）
+      properties:
+        external_id:
+          type: string
+        name:
+          type: string
+        system_name:
+          type: string
+        owners:
+          type: array
+          items:
+            type: string
+        contacts:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+    AssetSyncRequest:
+      type: object
+      properties:
+        source:
+          type: string
+          description: 兼容字段，等价于 sources 单元素
+        sources:
+          type: array
+          items:
+            type: string
+          description: 过滤要同步的数据源/插件键（如 Zabbix、CMDB、asset_zabbix_host 等）
+        mode:
+          type: string
+          enum: [sync, async]
+          description: sync=同步执行；async=异步任务
+    AssetSyncTriggerResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+        run_id:
+          type: string
+          format: uuid
+        result:
+          type: object
+          description: 同步完成时返回的统计信息
+    AssetSyncRun:
+      type: object
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        mode:
+          type: string
+          enum: [sync, async]
+        status:
+          type: string
+          enum: [queued, running, succeeded, failed, script_triggered]
+        source_filters:
+          type: array
+          items:
+            type: string
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        summary:
+          type: object
+        error_message:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    AssetSyncChange:
+      type: object
+      properties:
+        change_id:
+          type: string
+          format: uuid
+        record_id:
+          type: string
+          format: uuid
+          nullable: true
+        source:
+          type: string
+        external_id:
+          type: string
+        action:
+          type: string
+          enum: [create, update, restore, soft_delete]
+        changed_fields:
+          type: array
+          items:
+            type: string
+        before:
+          type: object
+        after:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+    AssetSyncRunListResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssetSyncRun'
+    AssetSyncRunDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/AssetSyncRun'
+        - type: object
+          properties:
+            changes:
+              type: array
+              items:
+                $ref: '#/components/schemas/AssetSyncChange'
+    ReportExportRequest:
+      type: object
+      required: [range]
+      properties:
+        range:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date
+            end:
+              type: string
+              format: date
+        metrics:
+          type: array
+          items:
+            type: string
+            enum: [success_rate, response_time, node_distribution]
+        format:
+          type: string
+          enum: [csv, excel]
+    ReportTask:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, running, completed, failed]
+        download_url:
+          type: string
+    DashboardOverview:
+      type: object
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        probes:
+          type: object
+          properties:
+            active:
+              type: integer
+            offline:
+              type: integer
+        detection:
+          type: object
+          properties:
+            pending_jobs:
+              type: integer
+            last_24h_runs:
+              type: integer
+        incidents:
+          type: object
+          properties:
+            open:
+              type: integer
+            acknowledged:
+              type: integer
+    DashboardAlertSummary:
+      type: object
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        total_alerts:
+          type: integer
+        breakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              level:
+                type: string
+                enum: [critical, warning, info]
+              count:
+                type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardAlertItem'
+    DashboardAlertItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        target:
+          type: string
+        status:
+          type: string
+        severity:
+          type: string
+          enum: [critical, warning, info]
+        occurred_at:
+          type: string
+          format: date-time
+        probe:
+          type: string
+        message:
+          type: string
+    DashboardTodoSummary:
+      type: object
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardTodoBucket'
+    DashboardTodoBucket:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum: [monitoring_request, probe_health, plugin]
+        total:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardTodoItem'
+    DashboardTodoItem:
+      type: object
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        link:
+          type: string
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+    DashboardDetectionGridItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        domain:
+          type: string
+        system_name:
+          type: string
+          nullable: true
+        task_name:
+          type: string
+          nullable: true
+        expected_status:
+          nullable: true
+          oneOf:
+            - type: integer
+            - type: array
+              items:
+                type: integer
+        actual_status:
+          type: integer
+          nullable: true
+        response_ms:
+          type: integer
+          nullable: true
+        probe:
+          type: string
+          nullable: true
+        checked_at:
+          type: string
+          format: date-time
+          nullable: true
+        status_message:
+          type: string
+          nullable: true
+    DashboardCertificateAlerts:
+      type: object
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        thresholds:
+          type: object
+          properties:
+            critical:
+              type: integer
+            warning:
+              type: integer
+            notice:
+              type: integer
+        stats:
+          type: object
+          properties:
+            schedules_total:
+              type: integer
+            schedules_with_result:
+              type: integer
+            missing_certificate_payload:
+              type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardCertificateAlertItem'
+    DashboardCertificateAlertItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        domain:
+          type: string
+        issuer:
+          type: string
+          nullable: true
+        days_remaining:
+          type: integer
+          nullable: true
+        severity:
+          type: string
+          enum: [critical, warning, info]
+        probe:
+          type: string
+          nullable: true
+        checked_at:
+          type: string
+          format: date-time
+          nullable: true
+        message:
+          type: string
+          nullable: true
+    SystemSettings:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        platform_name:
+          type: string
+        platform_logo:
+          type: string
+        default_timezone:
+          type: string
+        alert_escalation_threshold:
+          type: integer
+        zabbix_dashboard_refresh_seconds:
+          type: integer
+        certificate_expiry_threshold_critical_days:
+          type: integer
+        certificate_expiry_threshold_warning_days:
+          type: integer
+        certificate_expiry_threshold_notice_days:
+          type: integer
+        theme:
+          type: string
+        notification_channels:
+          type: object
+          additionalProperties: true
+        integrations:
+          type: object
+          additionalProperties: true
+        updated_at:
+          type: string
+          format: date-time
+    SystemSettingsUpdate:
+      type: object
+      properties:
+        platform_name:
+          type: string
+        platform_logo:
+          type: string
+        default_timezone:
+          type: string
+        alert_escalation_threshold:
+          type: integer
+        zabbix_dashboard_refresh_seconds:
+          type: integer
+        certificate_expiry_threshold_critical_days:
+          type: integer
+        certificate_expiry_threshold_warning_days:
+          type: integer
+        certificate_expiry_threshold_notice_days:
+          type: integer
+        theme:
+          type: string
+        notification_channels:
+          type: object
+          additionalProperties: true
+        integrations:
+          type: object
+          additionalProperties: true
+        expires_at:
+          type: string
+          format: date-time
+    AuditLogActor:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        display_name:
+          type: string
+    AuditLogEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        actor:
+          $ref: '#/components/schemas/AuditLogActor'
+        action:
+          type: string
+        target_type:
+          type: string
+        target_id:
+          type: string
+        result:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        ip_address:
+          type: string
+        user_agent:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+    AuditLogPagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+    AuditLogListResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLogEntry'
+        pagination:
+          $ref: '#/components/schemas/AuditLogPagination'
+    ToolDefinition:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        entry_point:
+          type: string
+        default_parameters:
+          type: object
+        latest_version:
+          $ref: '#/components/schemas/ScriptVersion'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ToolDefinitionCreate:
+      type: object
+      required: [name, category, content]
+      properties:
+        name:
+          type: string
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        entry_point:
+          type: string
+        default_parameters:
+          type: object
+        language:
+          type: string
+          enum: [python, shell, powershell, other]
+        content:
+          type: string
+    ScriptVersion:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        version:
+          type: string
+        language:
+          type: string
+        repository_path:
+          type: string
+        checksum:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    ScriptVersionCreate:
+      type: object
+      required: [content]
+      properties:
+        language:
+          type: string
+          enum: [python, shell, powershell, other]
+        repository_path:
+          type: string
+        content:
+          type: string
+        metadata:
+          type: object
+        version:
+          type: string
+    ToolExecutionRequest:
+      type: object
+      properties:
+        parameters:
+          type: object
+        script_version_id:
+          type: string
+          format: uuid
+        knowledge_slug:
+          type: string
+        knowledge_title:
+          type: string
+    ToolExecution:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        run_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, running, succeeded, failed]
+        parameters:
+          type: object
+        output:
+          type: string
+        error_message:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+    KnowledgeArticle:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        content:
+          type: string
+        attachments:
+          type: array
+          items:
+            type: string
+        visibility_scope:
+          type: string
+        last_edited_at:
+          type: string
+          format: date-time
+    KnowledgeArticleCreate:
+      type: object
+      required: [title, slug, content]
+      properties:
+        title:
+          type: string
+        slug:
+          type: string
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        content:
+          type: string
+        attachments:
+          type: array
+          items:
+            type: string
+        visibility_scope:
+          type: string
+    KnowledgeArticle:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        content:
+          type: string
+        visibility_scope:
+          type: string
+        last_edited_at:
+          type: string
+          format: date-time
+    KnowledgeArticleCreate:
+      type: object
+      required: [title, content, category]
+      properties:
+        title:
+          type: string
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        content:
+          type: string
+        visibility_scope:
+          type: string
+          enum: [public, internal, restricted]
+    KnowledgeArticleUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        content:
+          type: string
+        visibility_scope:
+          type: string
+    PluginConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+        name:
+          type: string
+        enabled:
+          type: boolean
+        health_status:
+          type: string
+          enum: [healthy, warning, critical]
+        last_health_check_at:
+          type: string
+          format: date-time
+    PluginToggleRequest:
+      type: object
+      required: [id, enabled]
+      properties:
+        id:
+          type: string
+          format: uuid
+        enabled:
+          type: boolean
+
+security:
+  - bearerAuth: []
