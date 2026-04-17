@@ -88,7 +88,7 @@ class AssetTypeListView(APIView):
     """
 
     # 与资产列表保持一致：暂时仅要求登录，细粒度权限后续统一收口。
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("assets.records.view")]
 
     def get(self, request: Request) -> Response:
         definitions = list_asset_types()

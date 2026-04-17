@@ -51,32 +51,12 @@ class ProbeHeartbeatCompatView(APIView):
         try:
             probe = ProbeNode.objects.get(id=pk)
         except (ProbeNode.DoesNotExist, ValueError):
-            probe = self._auto_register_probe(pk=pk, payload=payload, token=token)
+            raise Http404
         else:
             ensure_probe_authenticated(request, probe, token)
 
         handle_heartbeat(probe=probe, payload=payload)
         return Response({"status": "accepted"}, status=status.HTTP_202_ACCEPTED)
-
-    def _auto_register_probe(self, *, pk: str, payload: dict, token: str) -> ProbeNode:
-        try:
-            probe_uuid = uuid.UUID(str(pk))
-        except (TypeError, ValueError):
-            raise Http404
-
-        probe, _ = ProbeNode.objects.get_or_create(
-            id=probe_uuid,
-            defaults={
-                "name": f"probe-{str(probe_uuid)[:8]}",
-                "location": "自动注册",
-                "network_type": "external",
-                "supported_protocols": payload.get("supported_protocols") or [],
-                "status": payload.get("status") or "offline",
-            },
-        )
-        probe.set_api_token(token)
-        probe.touch_authenticated()
-        return probe
 
 
 class ProbeRecentAlertListView(APIView):

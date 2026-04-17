@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from django.urls import reverse
 
+from apps.core.models.user import Role
 from apps.tools.models import CodeDirectory, CodeRepository, CodeRepositoryVersion, ToolExecution
 
 
@@ -11,6 +12,8 @@ from apps.tools.models import CodeDirectory, CodeRepository, CodeRepositoryVersi
 def api_client():
     user_model = get_user_model()
     user = user_model.objects.create_user(username='repo-admin', password='password')
+    role = Role.objects.create(name='repo-admin-role', permissions=['tools.repository.manage'])
+    user.roles.set([role])
     client = APIClient()
     client.force_authenticate(user=user)
     return client

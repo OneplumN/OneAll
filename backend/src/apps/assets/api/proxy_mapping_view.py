@@ -24,6 +24,8 @@ class ProxyMappingView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request: Request) -> Response:
+        self.permission_classes = [permissions.IsAuthenticated, RequirePermission("assets.records.view")]
+        self.check_permissions(request)
         queryset = ProxyMapping.objects.filter(is_active=True).order_by("proxy")
         serializer = ProxyMappingSerializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -81,4 +83,3 @@ class ProxyMappingView(APIView):
         if request.method.upper() in {"PUT", "POST"}:
             self.permission_classes = [permissions.IsAuthenticated, RequirePermission("assets.records.manage")]
         super().check_permissions(request)
-

@@ -7,7 +7,14 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 
 from apps.assets.api.asset_view import AssetRecordImportView, AssetRecordListView
 from apps.assets.models import AssetRecord
-from apps.core.models.user import User
+from apps.core.models.user import Role, User
+
+
+def _make_user_with_permissions(username: str, *permissions: str) -> User:
+    user = User.objects.create(username=username)
+    role = Role.objects.create(name=f"{username}-role", permissions=list(permissions))
+    user.roles.set([role])
+    return user
 
 
 @pytest.mark.django_db
@@ -26,7 +33,7 @@ def test_create_asset_without_existing_conflict_succeeds() -> None:
         },
     }
     request = factory.post("/api/assets/records", data=json.dumps(payload), content_type="application/json")
-    user = User.objects.create(username="tester")
+    user = _make_user_with_permissions("tester", "assets.records.manage")
     force_authenticate(request, user=user)
 
     view = AssetRecordListView.as_view()
@@ -68,7 +75,7 @@ def test_import_conflicting_asset_rejected() -> None:
         ]
     }
     request = factory.post("/api/assets/import", data=json.dumps(payload), content_type="application/json")
-    user = User.objects.create(username="tester")
+    user = _make_user_with_permissions("tester-import", "assets.records.manage")
     force_authenticate(request, user=user)
     view = AssetRecordImportView.as_view()
     response = view(request)

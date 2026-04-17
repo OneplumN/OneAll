@@ -6,6 +6,7 @@ from rest_framework.generics import ListAPIView
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
+from apps.core.permissions import RequirePermission
 from apps.core.models import AuditLog
 from apps.core.serializers import AuditLogSerializer
 
@@ -29,7 +30,7 @@ class AuditLogPagination(PageNumberPagination):
 
 
 class AuditLogListView(ListAPIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("settings.audit_log.view")]
     serializer_class = AuditLogSerializer
     pagination_class = AuditLogPagination
 

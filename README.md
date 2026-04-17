@@ -426,6 +426,7 @@ pytest
 |:-------|:-----|
 | `DEBUG` | Django 调试开关 |
 | `SECRET_KEY` | Django 密钥 |
+| `ITSM_CALLBACK_SECRET` | ITSM 回调共享密钥，供受保护的状态回调接口校验 |
 | `ALLOWED_HOSTS` | 允许访问的域名 |
 | `MYSQL_HOST` / `MYSQL_PORT` / `MYSQL_DB` / `MYSQL_USER` / `MYSQL_PASSWORD` | 业务数据库 |
 | `REDIS_URL` | Redis 连接 |

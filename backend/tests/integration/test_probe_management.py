@@ -59,7 +59,7 @@ def test_create_probe_and_process_heartbeat(api_client):
 
 
 @pytest.mark.django_db
-def test_heartbeat_auto_registers_probe():
+def test_heartbeat_unknown_probe_is_rejected():
     client = APIClient()
     probe_id = uuid.uuid4()
     heartbeat_payload = {
@@ -74,14 +74,8 @@ def test_heartbeat_auto_registers_probe():
         format='json',
         HTTP_AUTHORIZATION=f'ProbeToken {token}',
     )
-    assert response.status_code == 202
-
-    probe = ProbeNode.objects.get(id=probe_id)
-    assert probe.name.startswith('probe-')
-    assert probe.status == 'online'
-    assert probe.supported_protocols == ['HTTP']
-    assert probe.last_heartbeat_at is not None
-    assert probe.api_token_hint == token[-4:]
+    assert response.status_code == 404
+    assert not ProbeNode.objects.filter(id=probe_id).exists()
 
 
 @pytest.mark.django_db

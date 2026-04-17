@@ -58,8 +58,12 @@ def _has_canonical_conflict(asset_type: str, canonical_key: str) -> bool:
 
 
 class AssetRecordListView(APIView):
-    # 暂时仅要求登录，细粒度权限控制留待后续统一收口
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method.upper() == "POST":
+            return [permissions.IsAuthenticated(), RequirePermission("assets.records.manage")()]
+        return [permissions.IsAuthenticated(), RequirePermission("assets.records.view")()]
 
     def get(self, request: Request) -> Response:
         include_removed = str(request.query_params.get("include_removed") or "").strip().lower() in {"1", "true", "yes", "y"}
@@ -105,8 +109,7 @@ class AssetRecordListView(APIView):
 
 
 class AssetRecordImportView(APIView):
-    # 暂时仅要求登录，细粒度权限控制留待后续统一收口
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("assets.records.manage")]
     MAX_RECORDS = 500
 
     def post(self, request: Request) -> Response:
@@ -269,7 +272,7 @@ class AssetRecordImportView(APIView):
 class AssetRecordQueryView(APIView):
     """资产查询（分页版，用于资产中心列表页）."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("assets.records.view")]
 
     DEFAULT_LIMIT = 20
     MAX_LIMIT = 200

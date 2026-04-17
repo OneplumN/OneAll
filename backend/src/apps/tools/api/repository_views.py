@@ -6,13 +6,14 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.permissions import RequirePermission
 from apps.tools.api.serializers import ScriptVersionCreateSerializer, ToolDefinitionSerializer
 from apps.tools.models import ScriptVersion, ToolDefinition
 from apps.tools.services.repository_audit import RepositoryAuditService
 
 
 class RepositoryUploadView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("tools.library.manage")]
 
     def post(self, request: Request) -> Response:
         tool = get_object_or_404(ToolDefinition, id=request.data.get("tool_id"))
@@ -27,7 +28,7 @@ class RepositoryUploadView(APIView):
 
 
 class RepositoryRollbackView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("tools.library.manage")]
 
     def post(self, request: Request) -> Response:
         tool = get_object_or_404(ToolDefinition, id=request.data.get("tool_id"))

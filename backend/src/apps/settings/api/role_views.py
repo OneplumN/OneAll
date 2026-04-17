@@ -20,7 +20,13 @@ from apps.settings.services.ldap_service import LDAPSyncError, sync_ldap_users
 class RoleViewSet(viewsets.ModelViewSet):
     queryset = Role.objects.all().annotate(user_count=Count("users"))
     serializer_class = RoleSerializer
-    permission_classes = [permissions.IsAuthenticated]
+
+    def get_permissions(self):
+        if self.action in {"list", "retrieve"}:
+            permission_classes = [permissions.IsAuthenticated, RequirePermission("settings.roles.view")]
+        else:
+            permission_classes = [permissions.IsAuthenticated, RequirePermission("settings.roles.manage")]
+        return [permission() for permission in permission_classes]
 
     def perform_create(self, serializer):
         role = serializer.save()
@@ -38,7 +44,7 @@ class RoleViewSet(viewsets.ModelViewSet):
 
 
 class PermissionCatalogView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("settings.roles.view")]
 
     def get(self, request):
         return Response({"modules": build_permission_catalog()})
@@ -50,7 +56,7 @@ class UserRoleListView(APIView):
     def get_permissions(self):
         if self.request.method == "POST":
             return [permissions.IsAuthenticated(), RequirePermission("settings.users.manage")()]
-        return [permissions.IsAuthenticated()]
+        return [permissions.IsAuthenticated(), RequirePermission("settings.users.view")()]
 
     def get(self, request):
         users = User.objects.order_by("username").prefetch_related("roles")
@@ -71,13 +77,16 @@ class UserRoleListView(APIView):
 
 
 class UserRoleUpdateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("settings.users.manage")]
 
     def put(self, request, user_id):
         try:
             user = User.objects.get(id=user_id)
         except User.DoesNotExist:
             return Response({"detail": "用户不存在"}, status=status.HTTP_404_NOT_FOUND)
+
+        if getattr(user, "is_superuser", False) and not getattr(request.user, "is_superuser", False):
+            return Response({"detail": "仅系统管理员可修改超级管理员用户"}, status=status.HTTP_403_FORBIDDEN)
 
         role_ids = request.data.get("role_ids", [])
         if role_ids is None:

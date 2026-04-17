@@ -6,6 +6,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.permissions import RequireAnyPermission, RequirePermission
 from apps.tools.api.serializers import (
     ScriptVersionCreateSerializer,
     ToolCreateSerializer,
@@ -21,6 +22,11 @@ from apps.tools.services.tool_runner import ToolRunnerService
 class ToolDefinitionListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_permissions(self):
+        if self.request.method.upper() == "POST":
+            return [permissions.IsAuthenticated(), RequirePermission("tools.library.create")()]
+        return [permissions.IsAuthenticated(), RequirePermission("tools.library.view")()]
+
     def get(self, request: Request) -> Response:
         queryset = ToolDefinition.objects.all().order_by("name")
         serializer = ToolDefinitionSerializer(queryset, many=True)
@@ -35,7 +41,7 @@ class ToolDefinitionListCreateView(APIView):
 
 
 class ToolScriptVersionCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("tools.library.manage")]
 
     def post(self, request: Request, tool_id: str) -> Response:
         tool = get_object_or_404(ToolDefinition, id=tool_id)
@@ -50,7 +56,7 @@ class ToolScriptVersionCreateView(APIView):
 
 
 class ToolExecuteView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequireAnyPermission("tools.library.manage", "tools.library.execute")]
 
     def post(self, request: Request, tool_id: str) -> Response:
         tool = get_object_or_404(ToolDefinition, id=tool_id)
@@ -69,7 +75,7 @@ class ToolExecuteView(APIView):
 
 
 class ToolExecutionListView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("tools.library.view")]
 
     def get(self, request: Request) -> Response:
         queryset = ToolExecution.objects.select_related("tool", "script_version").order_by("-created_at")

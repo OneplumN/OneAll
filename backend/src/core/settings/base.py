@@ -13,6 +13,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 env = environ.Env(
     DEBUG=(bool, False),
     SECRET_KEY=(str, "oneall-secret-key"),
+    ITSM_CALLBACK_SECRET=(str, ""),
     ALLOWED_HOSTS=(list[str], ["localhost", "127.0.0.1"]),
     LANGUAGE_CODE=(str, "zh-hans"),
     TIME_ZONE=(str, "Asia/Shanghai"),
@@ -26,6 +27,7 @@ load_env()
 
 CONSOLE_BASE_URL = env("CONSOLE_BASE_URL", default="")
 SECRET_KEY = env("SECRET_KEY")
+ITSM_CALLBACK_SECRET = env("ITSM_CALLBACK_SECRET", default="")
 DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 

@@ -74,6 +74,8 @@ class AssetModelListCreateView(APIView):
     def check_permissions(self, request: Request) -> None:
         if request.method.upper() == "POST":
             self.permission_classes = [permissions.IsAuthenticated, RequirePermission("assets.records.manage")]
+        else:
+            self.permission_classes = [permissions.IsAuthenticated, RequirePermission("assets.records.view")]
         super().check_permissions(request)
 
     def get(self, request: Request) -> Response:
@@ -109,6 +111,8 @@ class AssetModelDetailView(APIView):
     def check_permissions(self, request: Request) -> None:
         if request.method.upper() in {"PUT", "PATCH", "DELETE"}:
             self.permission_classes = [permissions.IsAuthenticated, RequirePermission("assets.records.manage")]
+        else:
+            self.permission_classes = [permissions.IsAuthenticated, RequirePermission("assets.records.view")]
         super().check_permissions(request)
 
     def get(self, request: Request, model_id) -> Response:

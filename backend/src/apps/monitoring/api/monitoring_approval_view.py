@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from django.conf import settings
 from rest_framework import permissions, status
 from rest_framework.generics import get_object_or_404
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -54,6 +56,11 @@ class MonitoringRequestStatusCallbackView(APIView):
     authentication_classes: list = []
 
     def patch(self, request: Request, pk: str) -> Response:
+        configured_secret = str(getattr(settings, "ITSM_CALLBACK_SECRET", "") or "").strip()
+        provided_secret = str(request.headers.get("X-OneAll-Callback-Secret") or "").strip()
+        if not configured_secret or provided_secret != configured_secret:
+            raise PermissionDenied("Invalid callback credentials")
+
         monitoring_request = get_object_or_404(MonitoringRequest, pk=pk)
 
         ticket_id = str((request.data or {}).get("itsm_ticket_id") or "").strip()

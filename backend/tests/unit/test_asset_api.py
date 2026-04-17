@@ -4,12 +4,20 @@ from rest_framework.test import APIClient
 from django.contrib.auth import get_user_model
 
 from apps.assets.models import AssetRecord
+from apps.core.models.user import Role
+
+
+def _make_user_with_permissions(username: str, *permissions: str):
+    user_model = get_user_model()
+    user = user_model.objects.create_user(username=username, password="pass1234")
+    role = Role.objects.create(name=f"{username}-role", permissions=list(permissions))
+    user.roles.set([role])
+    return user
 
 
 @pytest.mark.django_db
 def test_create_asset_record_via_api():
-    user_model = get_user_model()
-    user = user_model.objects.create_user(username="tester", password="pass1234")
+    user = _make_user_with_permissions("tester", "assets.records.manage")
 
     client = APIClient()
     client.force_authenticate(user=user)
@@ -44,8 +52,7 @@ def test_create_asset_record_via_api():
 
 @pytest.mark.django_db
 def test_import_assets_partial_success():
-    user_model = get_user_model()
-    user = user_model.objects.create_user(username="tester", password="pass1234")
+    user = _make_user_with_permissions("tester-import", "assets.records.manage")
 
     client = APIClient()
     client.force_authenticate(user=user)
@@ -76,8 +83,7 @@ def test_import_assets_partial_success():
 
 @pytest.mark.django_db
 def test_import_assets_all_failed():
-    user_model = get_user_model()
-    user = user_model.objects.create_user(username="tester2", password="pass1234")
+    user = _make_user_with_permissions("tester2", "assets.records.manage")
 
     client = APIClient()
     client.force_authenticate(user=user)

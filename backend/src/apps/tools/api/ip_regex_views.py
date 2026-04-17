@@ -4,12 +4,13 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.permissions import RequirePermission
 from apps.tools.api.serializers import IPRegexCompileSerializer, IPRegexReverseSerializer
 from apps.tools.services.ip_regex_runner import IPRegexScriptError, load_ip_regex_runtime
 
 
 class IPRegexCompileView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("tools.library.view")]
 
     def post(self, request: Request) -> Response:
         serializer = IPRegexCompileSerializer(data=request.data)
@@ -36,7 +37,7 @@ class IPRegexCompileView(APIView):
 
 
 class IPRegexReverseView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("tools.library.view")]
 
     def post(self, request: Request) -> Response:
         serializer = IPRegexReverseSerializer(data=request.data)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from rest_framework import permissions, viewsets
 
+from apps.core.permissions import RequirePermission
 from apps.settings.models import PluginConfig
 from .serializers import PluginConfigSerializer
 
@@ -13,9 +14,9 @@ class PluginConfigViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.request.method in permissions.SAFE_METHODS:
-            permission_classes = [permissions.IsAuthenticated]
+            permission_classes = [permissions.IsAuthenticated, RequirePermission("settings.system.view")]
         else:
-            permission_classes = [permissions.IsAdminUser]
+            permission_classes = [permissions.IsAuthenticated, RequirePermission("settings.system.manage")]
         return [permission() for permission in permission_classes]
 
     def update(self, request, *args, **kwargs):

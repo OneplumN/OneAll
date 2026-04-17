@@ -7,6 +7,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.permissions import RequirePermission
 from apps.tools.models import ScriptPlugin
 from apps.tools.services.repository_execution_service import RepositoryExecutionService
 from .serializers import (
@@ -19,7 +20,7 @@ from .serializers import (
 
 
 class ScriptPluginListView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("tools.library.view")]
 
     def get(self, request: Request) -> Response:
         queryset = ScriptPlugin.objects.select_related("repository", "repository_version").order_by("name")
@@ -30,8 +31,8 @@ class ScriptPluginListView(APIView):
 class ScriptPluginDetailView(APIView):
     def get_permissions(self):
         if self.request.method in permissions.SAFE_METHODS:
-            return [permissions.IsAuthenticated()]
-        return [permissions.IsAdminUser()]
+            return [permissions.IsAuthenticated(), RequirePermission("tools.library.view")()]
+        return [permissions.IsAuthenticated(), RequirePermission("tools.library.manage")()]
 
     def get(self, request: Request, slug: str) -> Response:
         plugin = get_object_or_404(ScriptPlugin.objects.select_related("repository", "repository_version"), slug=slug)
@@ -47,7 +48,7 @@ class ScriptPluginDetailView(APIView):
 
 
 class ScriptPluginExecuteView(APIView):
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("tools.library.manage")]
 
     def post(self, request: Request, slug: str) -> Response:
         plugin = get_object_or_404(ScriptPlugin.objects.select_related("repository", "repository_version"), slug=slug)

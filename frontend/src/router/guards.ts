@@ -14,6 +14,20 @@ export function installAuthGuard(router: Router, pinia: Pinia) {
       };
     }
 
+    if (to.meta.requiresAuth && session.isAuthenticated && !session.user) {
+      try {
+        await session.fetchProfile();
+      } catch {
+        return true;
+      }
+    }
+
+    const modulePermission = to.meta.modulePermission as string | undefined;
+    const routePermission = to.meta.permission as string | undefined;
+    if ((modulePermission && !session.hasPermission(modulePermission)) || (routePermission && !session.hasPermission(routePermission))) {
+      return { name: 'forbidden' };
+    }
+
     const pluginType = to.meta.pluginType as string | undefined;
     const pluginStrict = Boolean(to.meta.pluginStrict);
     if (pluginType && pluginStrict) {
