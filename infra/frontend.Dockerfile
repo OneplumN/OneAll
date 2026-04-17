@@ -3,19 +3,19 @@
 # 阶段1: 构建
 FROM node:20-alpine AS builder
 
-WORKDIR /app
+WORKDIR /app/frontend
 
 # 安装 pnpm
 RUN npm install -g pnpm
 
 # 复制依赖文件
-COPY package.json pnpm-lock.yaml* ./
+COPY frontend/package.json frontend/pnpm-lock.yaml* ./
 
 # 安装依赖
 RUN pnpm install --frozen-lockfile
 
 # 复制源代码
-COPY . .
+COPY frontend/ ./
 
 # 构建参数 - API 地址
 ARG VITE_API_BASE_URL=/api
@@ -28,10 +28,10 @@ RUN pnpm build
 FROM nginx:alpine
 
 # 复制构建产物
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder /app/frontend/dist /usr/share/nginx/html
 
 # 复制 nginx 配置
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY infra/nginx.conf /etc/nginx/conf.d/default.conf
 
 # 暴露端口
 EXPOSE 80

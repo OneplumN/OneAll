@@ -32,7 +32,7 @@ services:
       - "5432:5432"
     volumes:
       - timescaledb_data:/var/lib/postgresql/data
-      - ./deploy/docker/init-timescale.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./timescale/init-timescale.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -57,8 +57,8 @@ services:
   # ============ 后端服务 ============
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: ../backend
+      dockerfile: ../infra/backend.Dockerfile
     container_name: oneall-backend
     restart: unless-stopped
     environment:
@@ -97,8 +97,8 @@ services:
   # gRPC Gateway - 探针通信网关
   grpc-gateway:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: ../backend
+      dockerfile: ../infra/backend.Dockerfile
     container_name: oneall-grpc-gateway
     restart: unless-stopped
     environment:
@@ -129,8 +129,8 @@ services:
   # Celery Worker - 异步任务执行
   celery-worker:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: ../backend
+      dockerfile: ../infra/backend.Dockerfile
     container_name: oneall-celery-worker
     restart: unless-stopped
     environment:
@@ -159,8 +159,8 @@ services:
   # Celery Beat - 定时任务调度
   celery-beat:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: ../backend
+      dockerfile: ../infra/backend.Dockerfile
     container_name: oneall-celery-beat
     restart: unless-stopped
     environment:
@@ -189,8 +189,8 @@ services:
   # ============ 前端服务 ============
   frontend:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: ./infra/frontend.Dockerfile
       args:
         VITE_API_BASE_URL: /api
     container_name: oneall-frontend
@@ -203,8 +203,8 @@ services:
   # ============ 探针服务 ============
   probe:
     build:
-      context: ./probes
-      dockerfile: Dockerfile
+      context: ../probes
+      dockerfile: ../infra/probe.Dockerfile
     container_name: oneall-probe
     restart: unless-stopped
     environment:
@@ -215,7 +215,7 @@ services:
       PROBE_NODE_ID: ${PROBE_NODE_ID:-}
       PROBE_API_TOKEN: ${PROBE_API_TOKEN:-}
     volumes:
-      - ./deploy/docker/probe-config.yaml:/app/config.yaml:ro
+      - ./probe/probe-config.yaml:/app/config.yaml:ro
       - probe_data:/var/lib/oneall-probe
     depends_on:
       - backend

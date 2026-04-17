@@ -158,38 +158,42 @@ Browser
 
 ```text
 .
+├── frontend/             # Vue 前端源码与前端配置
 ├── backend/              # Django 后端
 ├── probes/               # Go 探针
-├── src/                  # Vue 前端
-├── deploy/               # 部署与初始化配置
+├── infra/                # Docker / compose / nginx / 本地运行编排
 ├── docs/                 # 当前结论文档与历史归档
 ├── scripts/              # 运维/验证脚本
 ├── specs/                # 历史方案与保留契约
-├── Dockerfile            # 前端镜像
-├── docker-compose.yml    # 一键部署
-└── package.json          # 前端依赖与脚本
+├── data/                 # 样例与同步数据
+├── README.md
+└── AGENTS.md
 ```
 
 ### 前端结构
 
 ```text
-src/
-├── app/                  # 应用级状态、API、会话
-├── features/             # 按业务域组织的主代码
-│   ├── alerts/
-│   ├── assets/
-│   ├── auth/
-│   ├── dashboard/
-│   ├── detection/
-│   ├── monitoring/
-│   ├── probes/
-│   ├── profile/
-│   ├── settings/
-│   └── tools/
-├── shared/               # 真正跨域复用能力
-├── router/               # 路由
-├── layouts/              # 布局
-└── i18n/                 # 国际化
+frontend/
+├── src/
+│   ├── app/              # 应用级状态、API、会话
+│   ├── features/         # 按业务域组织的主代码
+│   │   ├── alerts/
+│   │   ├── assets/
+│   │   ├── auth/
+│   │   ├── dashboard/
+│   │   ├── detection/
+│   │   ├── monitoring/
+│   │   ├── probes/
+│   │   ├── profile/
+│   │   ├── settings/
+│   │   └── tools/
+│   ├── shared/           # 真正跨域复用能力
+│   ├── router/           # 路由
+│   ├── layouts/          # 布局
+│   └── i18n/             # 国际化
+├── tests/                # e2e 与前端测试
+├── package.json
+└── vite.config.ts
 ```
 
 ### 后端结构
@@ -214,7 +218,22 @@ backend/src/
 ```text
 docs/
 ├── plans/                # 当前仍有参考价值的审计 / 收官文档
-└── archive/plans/        # 历史设计稿与实施计划归档
+├── archive/plans/        # 历史设计稿与实施计划归档
+└── archive/specs/        # 历史规格文档归档
+```
+
+### 基础设施结构
+
+```text
+infra/
+├── docker-compose.yml
+├── frontend.Dockerfile
+├── backend.Dockerfile
+├── probe.Dockerfile
+├── nginx.conf
+├── local/docker-compose.yml
+├── probe/probe-config.yaml
+└── timescale/init-timescale.sql
 ```
 
 ---
@@ -239,20 +258,20 @@ cp .env.example .env
 ### 3. 启动服务
 
 ```bash
-docker compose up -d --build
+docker compose -f infra/docker-compose.yml up -d --build
 ```
 
 启动后可检查状态：
 
 ```bash
-docker compose ps
-docker compose logs -f
+docker compose -f infra/docker-compose.yml ps
+docker compose -f infra/docker-compose.yml logs -f
 ```
 
 ### 4. 创建管理员账号
 
 ```bash
-docker compose exec backend python manage.py createsuperuser
+docker compose -f infra/docker-compose.yml exec backend python manage.py createsuperuser
 ```
 
 ### 5. 访问系统
@@ -274,7 +293,7 @@ PROBE_API_TOKEN=your-probe-token
 5. 启动探针服务：
 
 ```bash
-docker compose --profile probe up -d
+docker compose -f infra/docker-compose.yml --profile probe up -d
 ```
 
 ---
@@ -294,7 +313,7 @@ docker compose --profile probe up -d
 ### 1. 启动数据库
 
 ```bash
-docker compose -f deploy/local/docker-compose.yml up -d
+docker compose -f infra/local/docker-compose.yml up -d
 ```
 
 会启动：
@@ -339,9 +358,8 @@ celery -A core.celery_app beat -l info
 
 ### 3. 启动前端
 
-前端位于仓库根目录，不再使用历史 `frontend/` 子目录。
-
 ```bash
+cd frontend
 pnpm install
 pnpm dev
 ```
@@ -378,6 +396,7 @@ api_token: ""
 ### 5. 前端常用命令
 
 ```bash
+cd frontend
 pnpm lint
 pnpm test:unit
 pnpm build
@@ -426,12 +445,12 @@ pytest
 
 ### 前端配置
 
-前端配置位于仓库根目录，常用的是：
+前端配置位于 `frontend/` 目录，常用的是：
 
-- `vite.config.ts`
-- 可选的 `.env.local`（仅在需要覆盖本地 Vite 配置时自行创建）
+- `frontend/vite.config.ts`
+- 可选的 `frontend/.env.local`（仅在需要覆盖本地 Vite 配置时自行创建）
 
-本地开发如需显式覆盖 API 地址，可创建 `.env.local`：
+本地开发如需显式覆盖 API 地址，可创建 `frontend/.env.local`：
 
 ```ini
 VITE_API_BASE_URL=/api
@@ -461,10 +480,10 @@ VITE_API_BASE_URL=/api
 
 ### 方式一：Docker
 
-如果你使用根目录 `docker-compose.yml`，推荐直接启用 `probe` profile。
+如果你使用 `infra/docker-compose.yml`，推荐直接启用 `probe` profile。
 
 ```bash
-docker compose --profile probe up -d
+docker compose -f infra/docker-compose.yml --profile probe up -d
 ```
 
 ### 方式二：手工部署
@@ -500,9 +519,10 @@ WantedBy=multi-user.target
 
 ### 推荐方式
 
-- 前端：根目录 `Dockerfile`
-- 后端：`backend/Dockerfile`
-- 一键编排：根目录 [docker-compose.yml](./docker-compose.yml)
+- 前端镜像：`infra/frontend.Dockerfile`
+- 后端镜像：`infra/backend.Dockerfile`
+- 探针镜像：`infra/probe.Dockerfile`
+- 一键编排：[`infra/docker-compose.yml`](./infra/docker-compose.yml)
 
 ### 生产最小组件
 
