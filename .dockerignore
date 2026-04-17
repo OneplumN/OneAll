@@ -22,3 +22,7 @@ coverage/
 # Docker artifacts
 Dockerfile*
 .dockerignore
+
+# macOS resource fork files
+._*
+**/._*

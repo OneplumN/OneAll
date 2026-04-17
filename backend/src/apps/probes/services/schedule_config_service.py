@@ -126,3 +126,7 @@ def _ensure_future_next_run(schedule: ProbeSchedule) -> None:
     if schedule.next_run_at != next_run:
         schedule.next_run_at = next_run
         schedule.save(update_fields=["next_run_at", "updated_at"])
+        if schedule.source_type == ProbeSchedule.Source.MANUAL:
+            from apps.alerts.services import ensure_schedule_for_probe_schedule
+
+            ensure_schedule_for_probe_schedule(schedule)

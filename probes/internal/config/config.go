@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -85,12 +86,93 @@ func Load(path string) (Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("parse config: %w", err)
 	}
+	if err := applyEnvOverrides(&cfg); err != nil {
+		return Config{}, err
+	}
 	if cfg.APIBaseURL == "" {
 		return Config{}, fmt.Errorf("api_base_url is required")
 	}
 	// 在开发和大多数生产场景下，node_id / api_token / bootstrap_token 都可以留空，
 	// 由探针在启动时通过自动注册获取凭据。是否需要引导 token 由服务端配置控制。
 	return cfg, nil
+}
+
+func applyEnvOverrides(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+
+	applyString := func(name string, target *string) {
+		if value, ok := os.LookupEnv(name); ok && value != "" {
+			*target = value
+		}
+	}
+	applyBool := func(name string, target *bool) error {
+		value, ok := os.LookupEnv(name)
+		if !ok || value == "" {
+			return nil
+		}
+		parsed, err := strconv.ParseBool(value)
+		if err != nil {
+			return fmt.Errorf("invalid %s: %w", name, err)
+		}
+		*target = parsed
+		return nil
+	}
+	applyInt := func(name string, target *int) error {
+		value, ok := os.LookupEnv(name)
+		if !ok || value == "" {
+			return nil
+		}
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return fmt.Errorf("invalid %s: %w", name, err)
+		}
+		*target = parsed
+		return nil
+	}
+
+	applyString("PROBE_API_BASE_URL", &cfg.APIBaseURL)
+	applyString("PROBE_NODE_ID", &cfg.NodeID)
+	applyString("PROBE_API_TOKEN", &cfg.APIToken)
+	applyString("PROBE_BOOTSTRAP_TOKEN", &cfg.BootstrapToken)
+	applyString("PROBE_LOCATION", &cfg.Location)
+	applyString("PROBE_NETWORK_TYPE", &cfg.NetworkType)
+	applyString("PROBE_GRPC_GATEWAY", &cfg.GRPCGateway)
+	applyString("PROBE_GRPC_CA_FILE", &cfg.GRPCCAFile)
+	applyString("PROBE_GRPC_CLIENT_CERT", &cfg.GRPCClientCert)
+	applyString("PROBE_GRPC_CLIENT_KEY", &cfg.GRPCClientKey)
+	applyString("PROBE_METRICS_ADDR", &cfg.MetricsAddr)
+	applyString("PROBE_RESULT_CACHE_PATH", &cfg.ResultCachePath)
+	applyString("PROBE_UPDATE_DIR", &cfg.UpdateDir)
+	applyString("PROBE_SCHEDULE_STORE_PATH", &cfg.ScheduleStorePath)
+
+	if err := applyBool("PROBE_GRPC_INSECURE", &cfg.GRPCInsecure); err != nil {
+		return err
+	}
+	if err := applyBool("PROBE_INSECURE_SKIP_TLS", &cfg.InsecureSkipTLS); err != nil {
+		return err
+	}
+	if err := applyInt("PROBE_HEARTBEAT_INTERVAL", &cfg.HeartbeatIntervalSec); err != nil {
+		return err
+	}
+	if err := applyInt("PROBE_TASK_POLL_INTERVAL", &cfg.TaskPollIntervalSec); err != nil {
+		return err
+	}
+	if err := applyInt("PROBE_REQUEST_TIMEOUT", &cfg.RequestTimeoutSec); err != nil {
+		return err
+	}
+	if err := applyInt("PROBE_MAX_CONCURRENT_TASKS", &cfg.MaxConcurrentTasks); err != nil {
+		return err
+	}
+	if err := applyInt("PROBE_TASK_RETRY_LIMIT", &cfg.TaskRetryLimit); err != nil {
+		return err
+	}
+	if err := applyInt("PROBE_RESULT_CACHE_LIMIT", &cfg.ResultCacheLimit); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // UseGRPC reports whether the probe should attempt to connect via gRPC gateway.

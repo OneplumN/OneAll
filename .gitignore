@@ -15,7 +15,7 @@ venv/
 env/
 *.egg-info/
 *.sqlite3
-celerybeat-schedule
+celerybeat-schedule*
 
 # Tooling caches
 .pytest_cache/

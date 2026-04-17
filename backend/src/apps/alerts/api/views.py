@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
+from django.utils import timezone
 from rest_framework import status
 from rest_framework import permissions
 from rest_framework.request import Request
@@ -14,6 +15,7 @@ from apps.core.permissions import RequireAnyPermission, RequirePermission
 from apps.monitoring.models import MonitoringRequest
 from apps.probes.api.serializers import ProbeScheduleSerializer
 from apps.probes.models import ProbeSchedule
+from apps.probes.services import schedule_config_service
 
 
 def _primary_schedule_for_check(check: AlertCheck) -> AlertSchedule | None:
@@ -71,6 +73,10 @@ def _serialize_check_summary(check: AlertCheck, *, request_metadata_map: dict[st
 
 
 def _serialize_check_detail(check: AlertCheck) -> dict:
+    source_schedule = None
+    if check.source_type == AlertCheck.SourceType.PROBE_SCHEDULE and check.source_id:
+        source_schedule = ProbeSchedule.objects.filter(id=check.source_id).prefetch_related("probes").first()
+
     schedules = (
         AlertSchedule.objects.filter(alert_check=check)
         .order_by("id")
@@ -87,25 +93,27 @@ def _serialize_check_detail(check: AlertCheck) -> dict:
                 "id": str(schedule.id),
                 "frequency_minutes": schedule.frequency_minutes,
                 "status": schedule.status,
-                "start_at": schedule.start_at.isoformat() if schedule.start_at else None,
-                "end_at": schedule.end_at.isoformat() if schedule.end_at else None,
-                "last_run_at": schedule.last_run_at.isoformat() if schedule.last_run_at else None,
-                "next_run_at": schedule.next_run_at.isoformat() if schedule.next_run_at else None,
+                "start_at": _serialize_datetime(schedule.start_at),
+                "end_at": _serialize_datetime(schedule.end_at),
+                "last_run_at": (
+                    _serialize_datetime(source_schedule.last_run_at)
+                    if source_schedule and source_schedule.last_run_at
+                    else _serialize_datetime(schedule.last_run_at)
+                ),
+                "next_run_at": (
+                    _serialize_datetime(source_schedule.next_run_at)
+                    if source_schedule and source_schedule.next_run_at
+                    else _serialize_datetime(schedule.next_run_at)
+                ),
                 "metadata": schedule.metadata or {},
                 "last_execution": None
                 if not last_exec
                 else {
                     "id": str(last_exec.id),
                     "status": last_exec.status,
-                    "scheduled_at": last_exec.scheduled_at.isoformat()
-                    if last_exec.scheduled_at
-                    else None,
-                    "started_at": last_exec.started_at.isoformat()
-                    if last_exec.started_at
-                    else None,
-                    "finished_at": last_exec.finished_at.isoformat()
-                    if last_exec.finished_at
-                    else None,
+                    "scheduled_at": _serialize_datetime(last_exec.scheduled_at),
+                    "started_at": _serialize_datetime(last_exec.started_at),
+                    "finished_at": _serialize_datetime(last_exec.finished_at),
                     "response_time_ms": last_exec.response_time_ms,
                     "status_code": last_exec.status_code,
                     "error_message": last_exec.error_message,
@@ -115,20 +123,18 @@ def _serialize_check_detail(check: AlertCheck) -> dict:
 
     probe_ids: list[str] = []
     probes_payload: list[dict] = []
-    if check.source_type == AlertCheck.SourceType.PROBE_SCHEDULE and check.source_id:
-        source_schedule = ProbeSchedule.objects.filter(id=check.source_id).prefetch_related("probes").first()
-        if source_schedule:
-            probe_ids = [str(probe.id) for probe in source_schedule.probes.all()]
-            probes_payload = [
-                {
-                    "id": str(probe.id),
-                    "name": probe.name,
-                    "location": probe.location,
-                    "network_type": probe.network_type,
-                    "status": probe.status,
-                }
-                for probe in source_schedule.probes.all()
-            ]
+    if source_schedule:
+        probe_ids = [str(probe.id) for probe in source_schedule.probes.all()]
+        probes_payload = [
+            {
+                "id": str(probe.id),
+                "name": probe.name,
+                "location": probe.location,
+                "network_type": probe.network_type,
+                "status": probe.status,
+            }
+            for probe in source_schedule.probes.all()
+        ]
 
     request_metadata_map = _monitoring_request_metadata_map([check])
     payload = {
@@ -140,6 +146,14 @@ def _serialize_check_detail(check: AlertCheck) -> dict:
         "schedules": schedules_payload,
     }
     return payload
+
+
+def _serialize_datetime(value):
+    if not value:
+        return None
+    if timezone.is_aware(value):
+        return timezone.localtime(value).isoformat()
+    return value.isoformat()
 
 
 def _listable_checks_queryset():
@@ -248,6 +262,8 @@ class AlertCheckListView(APIView):
         serializer = ProbeScheduleSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         schedule = serializer.save()
+        probe_ids = list(schedule.probes.values_list("id", flat=True))
+        schedule_config_service.request_probe_refresh(probe_ids)
         check = get_object_or_404(
             AlertCheck.objects.prefetch_related("schedules"),
             source_type=AlertCheck.SourceType.PROBE_SCHEDULE,
@@ -317,7 +333,9 @@ class AlertCheckDetailView(APIView):
 
         serializer = ProbeScheduleSerializer(instance=schedule, data=payload, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        updated = serializer.save()
+        probe_ids = list(updated.probes.values_list("id", flat=True))
+        schedule_config_service.request_probe_refresh(probe_ids)
 
         check.refresh_from_db()
         return Response(_serialize_check_summary(check))
@@ -338,8 +356,10 @@ class AlertCheckDetailView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        probe_ids = list(schedule.probes.values_list("id", flat=True))
         schedule.delete()
         check.delete()
+        schedule_config_service.request_probe_refresh(probe_ids)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

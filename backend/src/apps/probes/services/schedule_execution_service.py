@@ -64,6 +64,12 @@ def _update_schedule_runtime(*, schedule: ProbeSchedule, scheduled_at: datetime)
     schedule.last_run_at = scheduled_at
     schedule.next_run_at = next_run
     schedule.save(update_fields=["last_run_at", "next_run_at", "updated_at"])
+    if schedule.source_type == ProbeSchedule.Source.MANUAL:
+        # Keep the AlertSchedule mirror aligned so alert detail pages reflect the
+        # same runtime fields as the probe schedule source of truth.
+        from apps.alerts.services import ensure_schedule_for_probe_schedule
+
+        ensure_schedule_for_probe_schedule(schedule)
 
 
 def _apply_expected_status_codes(

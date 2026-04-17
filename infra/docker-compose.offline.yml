@@ -1,7 +1,6 @@
 version: '3.9'
 
 services:
-  # ============ 数据库服务 ============
   mysql:
     image: mysql:8.0
     container_name: oneall-mysql
@@ -54,11 +53,8 @@ services:
       timeout: 5s
       retries: 5
 
-  # ============ 后端服务 ============
   backend:
-    build:
-      context: ../backend
-      dockerfile: ../infra/backend.Dockerfile
+    image: ${ONEALL_BACKEND_IMAGE}
     container_name: oneall-backend
     restart: unless-stopped
     environment:
@@ -99,11 +95,8 @@ services:
         gunicorn core.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120
       "
 
-  # gRPC Gateway - 探针通信网关
   grpc-gateway:
-    build:
-      context: ../backend
-      dockerfile: ../infra/backend.Dockerfile
+    image: ${ONEALL_BACKEND_IMAGE}
     container_name: oneall-grpc-gateway
     restart: unless-stopped
     environment:
@@ -133,11 +126,8 @@ services:
         condition: service_healthy
     command: ["python", "manage.py", "run_probe_gateway", "--host", "0.0.0.0", "--port", "50051"]
 
-  # Celery Worker - 异步任务执行
   celery-worker:
-    build:
-      context: ../backend
-      dockerfile: ../infra/backend.Dockerfile
+    image: ${ONEALL_BACKEND_IMAGE}
     container_name: oneall-celery-worker
     restart: unless-stopped
     environment:
@@ -165,11 +155,8 @@ services:
         condition: service_healthy
     command: ["celery", "-A", "core.celery_app", "worker", "-l", "info"]
 
-  # Celery Beat - 定时任务调度
   celery-beat:
-    build:
-      context: ../backend
-      dockerfile: ../infra/backend.Dockerfile
+    image: ${ONEALL_BACKEND_IMAGE}
     container_name: oneall-celery-beat
     restart: unless-stopped
     environment:
@@ -197,13 +184,8 @@ services:
         condition: service_healthy
     command: ["celery", "-A", "core.celery_app", "beat", "-l", "info"]
 
-  # ============ 前端服务 ============
   frontend:
-    build:
-      context: ..
-      dockerfile: ./infra/frontend.Dockerfile
-      args:
-        VITE_API_BASE_URL: /api
+    image: ${ONEALL_FRONTEND_IMAGE}
     container_name: oneall-frontend
     restart: unless-stopped
     ports:
@@ -211,15 +193,11 @@ services:
     depends_on:
       - backend
 
-  # ============ 探针服务 ============
   probe:
-    build:
-      context: ../probes
-      dockerfile: ../infra/probe.Dockerfile
+    image: ${ONEALL_PROBE_IMAGE}
     container_name: oneall-probe
     restart: unless-stopped
     environment:
-      # 探针支持通过 PROBE_* 环境变量覆盖 config.yaml，并可在未提供凭据时自动注册
       PROBE_API_BASE_URL: http://backend:8000
       PROBE_GRPC_GATEWAY: grpc-gateway:50051
       PROBE_GRPC_INSECURE: "true"
@@ -232,7 +210,6 @@ services:
     depends_on:
       - backend
       - grpc-gateway
-    # 探针默认不随基础栈启动；按需启用 profile，未提供凭据时会自动注册
     profiles:
       - probe
 

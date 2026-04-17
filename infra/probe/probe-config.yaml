@@ -5,11 +5,14 @@
 # 后端 API 地址
 api_base_url: "http://backend:8000"
 
-# 探针 ID（从管理界面获取，或通过 PROBE_NODE_ID 环境变量设置）
+# 探针 ID（可留空；留空时会自动注册，也可通过 PROBE_NODE_ID 环境变量覆盖）
 node_id: ""
 
-# 探针 Token（从管理界面获取，或通过 PROBE_API_TOKEN 环境变量设置）
+# 探针 Token（可留空；留空时会自动注册，也可通过 PROBE_API_TOKEN 环境变量覆盖）
 api_token: ""
+
+# 可选引导 Token（后端配置 PROBE_BOOTSTRAP_TOKEN 时，可通过 PROBE_BOOTSTRAP_TOKEN 环境变量覆盖）
+bootstrap_token: ""
 
 # gRPC 网关地址
 grpc_gateway: "grpc-gateway:50051"

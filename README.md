@@ -278,19 +278,26 @@ docker compose -f infra/docker-compose.yml exec backend python manage.py creates
 
 - 前端入口：`http://localhost`
 
-### 6. 注册并启动探针
+### 6. 启动探针（可选）
 
-1. 登录系统
-2. 进入“节点”
-3. 创建探针节点并获取 `node_id` / `api_token`
-4. 在 `.env` 中补充：
+默认的 `docker compose -f infra/docker-compose.yml up -d --build` 只启动核心栈，不会自动启动 `probe` profile。
+
+如需一起启动容器化 Go probe，可在根目录 `.env` 中按需补充：
 
 ```ini
-PROBE_NODE_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-PROBE_API_TOKEN=your-probe-token
+CONSOLE_BASE_URL=http://localhost
+PROBE_BOOTSTRAP_TOKEN=
+PROBE_NODE_ID=
+PROBE_API_TOKEN=
 ```
 
-5. 启动探针服务：
+说明：
+
+- `PROBE_BOOTSTRAP_TOKEN` 仅在后端启用了引导校验时需要填写。
+- `PROBE_NODE_ID` / `PROBE_API_TOKEN` 留空时，probe 会在首次启动时自动注册，并把凭据持久化到 `probe_data` 卷。
+- 如果你想复用已有节点，再手动填写 `PROBE_NODE_ID` / `PROBE_API_TOKEN`。
+
+启动探针服务：
 
 ```bash
 docker compose -f infra/docker-compose.yml --profile probe up -d
@@ -469,6 +476,7 @@ VITE_API_BASE_URL=/api
 |:-------|:-----|
 | `api_base_url` | 后端 API 地址 |
 | `grpc_gateway` | gRPC 网关地址 |
+| `bootstrap_token` | 可选引导 Token |
 | `node_id` | 节点 ID |
 | `api_token` | 节点 Token |
 | `heartbeat_interval` | 心跳间隔 |
@@ -482,6 +490,10 @@ VITE_API_BASE_URL=/api
 ### 方式一：Docker
 
 如果你使用 `infra/docker-compose.yml`，推荐直接启用 `probe` profile。
+
+- 默认可走自动注册，不需要预先写死 `node_id` / `api_token`
+- 如果服务端启用了引导校验，请先在根目录 `.env` 中配置 `PROBE_BOOTSTRAP_TOKEN`
+- 如需复用已有探针节点，可选配置 `PROBE_NODE_ID` / `PROBE_API_TOKEN`
 
 ```bash
 docker compose -f infra/docker-compose.yml --profile probe up -d
@@ -575,8 +587,9 @@ WantedBy=multi-user.target
 
 1. 检查 `api_base_url`
 2. 检查 `grpc_gateway`
-3. 检查 `node_id` / `api_token`
-4. 检查防火墙和端口放行
+3. 如果启用了引导校验，检查 `bootstrap_token` / `PROBE_BOOTSTRAP_TOKEN`
+4. 检查 `node_id` / `api_token` 或自动注册日志
+5. 检查防火墙和端口放行
 
 ### 资产同步失败
 
