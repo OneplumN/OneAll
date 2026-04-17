@@ -8,6 +8,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.permissions import RequirePermission
 from apps.probes.models import ProbeSchedule, ProbeScheduleExecution
 
 CERTIFICATE_ALERT_THRESHOLD_CRITICAL = 15
@@ -33,7 +34,7 @@ def _parse_days(value: Any) -> int | None:
 
 
 class DashboardCertificateAlertsView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("monitoring.overview.view")]
 
     def get(self, request: Request) -> Response:
         limit = _parse_int(request.query_params.get("limit"), 12, min_value=1, max_value=100)

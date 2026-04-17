@@ -5,11 +5,12 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.permissions import RequirePermission
 from apps.dashboard.services.alerts_service import get_alert_summary
 
 
 class DashboardAlertsSummaryView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("monitoring.overview.view")]
 
     def get(self, request: Request) -> Response:  # pragma: no cover - thin wrapper
         try:

@@ -4,6 +4,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 
+from apps.core.models.user import Role
 from apps.probes.models import ProbeNode
 
 
@@ -11,6 +12,8 @@ from apps.probes.models import ProbeNode
 def api_client():
     user_model = get_user_model()
     user = user_model.objects.create_user(username='tester', password='password')
+    role = Role.objects.create(name='probe-node-admin-role', permissions=['probes.nodes.manage'])
+    user.roles.set([role])
     client = APIClient()
     client.force_authenticate(user=user)
     return client

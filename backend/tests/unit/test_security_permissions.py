@@ -143,3 +143,45 @@ def test_code_repository_update_allows_owner_and_blocks_non_owner_without_manage
         format="json",
     )
     assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_dashboard_overview_requires_monitoring_overview_view_permission():
+    client = APIClient()
+    plain_user = _make_user_with_permissions("plain-dashboard-user")
+    client.force_authenticate(user=plain_user)
+    response = client.get(reverse("dashboard-overview"))
+    assert response.status_code == 403
+
+    viewer = _make_user_with_permissions("dashboard-viewer", "monitoring.overview.view")
+    client.force_authenticate(user=viewer)
+    response = client.get(reverse("dashboard-overview"))
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_monitoring_request_list_requires_view_permission():
+    client = APIClient()
+    plain_user = _make_user_with_permissions("plain-request-user")
+    client.force_authenticate(user=plain_user)
+    response = client.get(reverse("monitoring-request"))
+    assert response.status_code == 403
+
+    viewer = _make_user_with_permissions("request-viewer", "detection.schedules.view")
+    client.force_authenticate(user=viewer)
+    response = client.get(reverse("monitoring-request"))
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_probe_node_list_requires_view_permission():
+    client = APIClient()
+    plain_user = _make_user_with_permissions("plain-probe-user")
+    client.force_authenticate(user=plain_user)
+    response = client.get(reverse("probe-node-list"))
+    assert response.status_code == 403
+
+    viewer = _make_user_with_permissions("probe-viewer", "probes.nodes.view")
+    client.force_authenticate(user=viewer)
+    response = client.get(reverse("probe-node-list"))
+    assert response.status_code == 200

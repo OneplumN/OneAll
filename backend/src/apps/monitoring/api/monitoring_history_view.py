@@ -5,6 +5,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.permissions import RequirePermission
 from apps.monitoring.repositories.monitoring_history_repository import MonitoringHistoryFilters
 from apps.monitoring.serializers.monitoring_history_serializer import (
     MonitoringHistoryQuerySerializer,
@@ -14,7 +15,7 @@ from apps.monitoring.services import monitoring_history_service
 
 
 class MonitoringHistoryView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("detection.schedules.view")]
 
     def get(self, request: Request) -> Response:
         query_serializer = MonitoringHistoryQuerySerializer(data=request.query_params)

@@ -6,6 +6,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.alerts.models import AlertSchedule
+from apps.core.models.user import Role
 from apps.monitoring.models import MonitoringJob, MonitoringRequest
 from apps.monitoring.services.monitoring_job_service import create_job_for_request
 from apps.probes.models import ProbeNode
@@ -15,6 +16,8 @@ from apps.probes.models import ProbeNode
 def test_monitoring_request_patch_syncs_approved_request_to_job_and_alert_schedule():
     user_model = get_user_model()
     user = user_model.objects.create_user(username="monitor-editor", password="pass1234")
+    role = Role.objects.create(name="monitor-editor-role", permissions=["detection.schedules.create", "detection.schedules.view"])
+    user.roles.set([role])
     old_probe = ProbeNode.objects.create(
         name="old-probe",
         location="Shanghai",

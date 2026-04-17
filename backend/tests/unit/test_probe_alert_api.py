@@ -6,12 +6,15 @@ import pytest
 from django.urls import reverse
 
 from apps.core.models import AuditLog, User
+from apps.core.models.user import Role
 from apps.probes.models import ProbeNode, ProbeSchedule
 
 
 @pytest.mark.django_db
 def test_recent_probe_alerts_api(client):
     user = User.objects.create_user(username="tester", password="dummy")
+    role = Role.objects.create(name="probe-alert-viewer-role", permissions=["probes.nodes.view"])
+    user.roles.set([role])
     client.force_login(user)
 
     probe = ProbeNode.objects.create(

@@ -10,13 +10,14 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.permissions import RequirePermission
 from apps.monitoring.models import DetectionTask
 from apps.monitoring.serializers.detection_serializer import DetectionTaskSerializer
 from apps.monitoring.services import detection_service
 
 
 class DetectionDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("detection.oneoff.view")]
 
     def get(self, request: Request, detection_id: str) -> Response:
         task_id = detection_id if isinstance(detection_id, uuid.UUID) else uuid.UUID(str(detection_id))

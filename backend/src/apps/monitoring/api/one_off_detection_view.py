@@ -7,6 +7,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.permissions import RequirePermission
 from apps.monitoring.models import DetectionTask
 from apps.monitoring.serializers.detection_serializer import (
     DetectionRequestSerializer,
@@ -20,7 +21,7 @@ from apps.monitoring.services.detection_scheduler import ProbeCapacityError, Pro
 
 
 class OneOffDetectionView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("detection.oneoff.create")]
 
     def post(self, request: Request) -> Response:
         serializer = DetectionRequestSerializer(data=request.data)

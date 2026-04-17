@@ -5,6 +5,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.permissions import RequirePermission
 from apps.monitoring.serializers import (
     MonitoringRequestCreateSerializer,
     MonitoringRequestSerializer,
@@ -14,6 +15,11 @@ from apps.monitoring.models import MonitoringRequest
 
 class MonitoringRequestView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method.upper() == "POST":
+            return [permissions.IsAuthenticated(), RequirePermission("detection.schedules.create")()]
+        return [permissions.IsAuthenticated(), RequirePermission("detection.schedules.view")()]
 
     def get(self, request: Request) -> Response:
         queryset = MonitoringRequest.objects.select_related("created_by").all().order_by("-created_at")

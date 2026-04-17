@@ -6,6 +6,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.permissions import RequireAnyPermission, RequirePermission
 from apps.core.models import AuditLog
 from apps.monitoring.models import MonitoringRequest
 from apps.monitoring.serializers import MonitoringRequestSerializer
@@ -22,6 +23,11 @@ class MonitoringRequestDetailView(APIView):
     """
 
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method.upper() == "PATCH":
+            return [permissions.IsAuthenticated(), RequireAnyPermission("detection.schedules.create", "detection.schedules.manage")()]
+        return [permissions.IsAuthenticated(), RequirePermission("detection.schedules.view")()]
 
     def get(self, request: Request, pk: str) -> Response:
         instance = get_object_or_404(MonitoringRequest.objects.select_related("created_by"), pk=pk)

@@ -7,6 +7,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.permissions import RequirePermission
 from apps.probes.models import ProbeSchedule, ProbeScheduleExecution
 
 
@@ -42,7 +43,7 @@ def _normalize_expected_status(value: Any) -> int | list[int] | None:
 
 
 class DashboardDetectionGridView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("monitoring.overview.view")]
 
     def get(self, request: Request) -> Response:
         limit = _parse_int(request.query_params.get("limit"), 50, min_value=1, max_value=200)

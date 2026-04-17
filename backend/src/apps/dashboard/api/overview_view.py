@@ -4,11 +4,12 @@ from rest_framework import permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.permissions import RequirePermission
 from apps.dashboard.services.overview_service import get_overview_metrics
 
 
 class DashboardOverviewView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("monitoring.overview.view")]
 
     def get(self, request):
         metrics = get_overview_metrics()

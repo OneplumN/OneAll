@@ -5,11 +5,12 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.permissions import RequirePermission
 from apps.monitoring.services.cmdb_checker import validate_domain
 
 
 class DomainValidationView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("detection.oneoff.view")]
 
     def get(self, request: Request) -> Response:
         domain = request.query_params.get('domain')

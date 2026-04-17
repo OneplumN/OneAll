@@ -14,6 +14,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from apps.core.models import AuditLog
+from apps.core.permissions import RequirePermission
 from apps.probes.models import ProbeNode, ProbeSchedule, ProbeScheduleExecution
 from apps.probes.services.probe_monitor_service import handle_heartbeat
 from apps.probes.services import (
@@ -62,7 +63,7 @@ class ProbeHeartbeatCompatView(APIView):
 class ProbeRecentAlertListView(APIView):
     """Legacy recent probe alert endpoint backed by AuditLog."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("probes.nodes.view")]
 
     def get(self, request, *args, **kwargs):
         logs = AuditLog.objects.filter(action="probes.alert").order_by("-created_at")[:50]
@@ -155,6 +156,19 @@ class ProbeNodeViewSet(viewsets.ModelViewSet):
     queryset = ProbeNode.objects.order_by("name")
     serializer_class = ProbeNodeSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_permissions(self):
+        if self.action == "agent_config":
+            permission_classes = [permissions.AllowAny]
+        elif self.action == "create":
+            permission_classes = [permissions.IsAuthenticated, RequirePermission("probes.nodes.create")]
+        elif self.action in {"update", "partial_update", "destroy", "rotate_token"}:
+            permission_classes = [permissions.IsAuthenticated, RequirePermission("probes.nodes.manage")]
+        elif self.action in {"list", "retrieve", "metrics_history", "health", "result_stats", "runtime"}:
+            permission_classes = [permissions.IsAuthenticated, RequirePermission("probes.nodes.view")]
+        else:
+            permission_classes = [permissions.IsAuthenticated]
+        return [permission() for permission in permission_classes]
 
     # heartbeat/tasks endpoints are deprecated (all probe communications are via gRPC).
 
@@ -330,11 +344,15 @@ class ProbeNodeViewSet(viewsets.ModelViewSet):
     def agent_config(self, request, *args, **kwargs):
         probe = self.get_object()
         if request.method.lower() == "get":
+            if request.user.is_authenticated and not RequirePermission("probes.nodes.view")().has_permission(request, self):
+                raise PermissionDenied("缺少探针查看权限")
             if not request.user.is_authenticated:
                 ensure_probe_authenticated(request, probe)
             return Response(self._build_agent_config_response(probe), status=status.HTTP_200_OK)
         if not request.user.is_authenticated:
             raise PermissionDenied("需要登录后才能更新配置")
+        if not RequirePermission("probes.nodes.manage")().has_permission(request, self):
+            raise PermissionDenied("缺少探针管理权限")
         serializer = ProbeAgentConfigSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data
@@ -462,6 +480,13 @@ class ProbeNodeViewSet(viewsets.ModelViewSet):
 class ProbeScheduleViewSet(viewsets.ModelViewSet):
     serializer_class = ProbeScheduleSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_permissions(self):
+        if self.action in {"create", "update", "partial_update", "destroy", "pause", "resume", "archive"}:
+            permission_classes = [permissions.IsAuthenticated, RequirePermission("detection.schedules.manage")]
+        else:
+            permission_classes = [permissions.IsAuthenticated, RequirePermission("detection.schedules.view")]
+        return [permission() for permission in permission_classes]
 
     def get_queryset(self):
         queryset = ProbeSchedule.objects.select_related("monitoring_request").prefetch_related("probes").all()
@@ -630,7 +655,7 @@ class ProbeScheduleViewSet(viewsets.ModelViewSet):
 class ProbeScheduleExecutionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ProbeScheduleExecution.objects.select_related("schedule", "probe").all().order_by("-scheduled_at")
     serializer_class = ProbeScheduleExecutionSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("detection.schedules.view")]
     pagination_class = ProbeExecutionPagination
 
     def get_queryset(self):
