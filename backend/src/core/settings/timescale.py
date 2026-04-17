@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS probe_runtime_metrics (
     probe_id UUID NOT NULL,
     node_name TEXT NOT NULL,
     uptime_seconds BIGINT NOT NULL,
+    cpu_usage DOUBLE PRECISION NULL,
+    memory_usage_mb DOUBLE PRECISION NULL,
     heartbeats_sent BIGINT NOT NULL,
     heartbeats_failed BIGINT NOT NULL,
     heartbeats_last_success TIMESTAMPTZ NULL,

@@ -55,9 +55,8 @@ INSTALLED_APPS = [
     "apps.settings",
     "apps.monitoring",
     "apps.assets",
-    "apps.analytics",
     "apps.tools",
-    "apps.knowledge",
+    "apps.alerts",
 ]
 
 MIDDLEWARE = [
@@ -217,3 +216,6 @@ ZABBIX_API_TIMEOUT = env.int("ZABBIX_API_TIMEOUT", default=10)
 ZABBIX_VERIFY_TLS = env.bool("ZABBIX_VERIFY_TLS", default=True)
 
 DETECTION_MAX_ACTIVE_TASKS = env.int("DETECTION_MAX_ACTIVE_TASKS", default=5)
+
+# Alerts central scheduler
+ALERTS_CENTRAL_SCHEDULER_ENABLED = env.bool("ALERTS_CENTRAL_SCHEDULER_ENABLED", default=False)

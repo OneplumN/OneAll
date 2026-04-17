@@ -13,12 +13,12 @@ from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
 from apps.core.models import AuditLog
 from apps.probes.models import ProbeNode, ProbeSchedule, ProbeScheduleExecution
 from apps.probes.services.probe_monitor_service import handle_heartbeat
 from apps.probes.services import (
     probe_metrics_service,
+    probe_registration_service,
     schedule_config_service,
     schedule_execution_service,
 )
@@ -26,14 +26,94 @@ from apps.probes.authentication import ensure_probe_authenticated, extract_probe
 
 from .serializers import (
     ProbeAgentConfigSerializer,
-    ProbeAlertRecordSerializer,
     ProbeNodeSerializer,
+    ProbeRegistrationSerializer,
     ProbeScheduleSerializer,
     ProbeTokenSerializer,
     ProbeScheduleExecutionSerializer,
 )
 
 logger = logging.getLogger(__name__)
+
+
+class ProbeHeartbeatCompatView(APIView):
+    """Legacy HTTP heartbeat endpoint kept for compatibility."""
+
+    permission_classes: list = []
+    authentication_classes: list = []
+
+    def post(self, request, pk: str, *args, **kwargs):
+        token = extract_probe_token(request)
+        if not token:
+            raise AuthenticationFailed("Invalid probe token")
+
+        payload = dict(request.data or {})
+        try:
+            probe = ProbeNode.objects.get(id=pk)
+        except (ProbeNode.DoesNotExist, ValueError):
+            probe = self._auto_register_probe(pk=pk, payload=payload, token=token)
+        else:
+            ensure_probe_authenticated(request, probe, token)
+
+        handle_heartbeat(probe=probe, payload=payload)
+        return Response({"status": "accepted"}, status=status.HTTP_202_ACCEPTED)
+
+    def _auto_register_probe(self, *, pk: str, payload: dict, token: str) -> ProbeNode:
+        try:
+            probe_uuid = uuid.UUID(str(pk))
+        except (TypeError, ValueError):
+            raise Http404
+
+        probe, _ = ProbeNode.objects.get_or_create(
+            id=probe_uuid,
+            defaults={
+                "name": f"probe-{str(probe_uuid)[:8]}",
+                "location": "自动注册",
+                "network_type": "external",
+                "supported_protocols": payload.get("supported_protocols") or [],
+                "status": payload.get("status") or "offline",
+            },
+        )
+        probe.set_api_token(token)
+        probe.touch_authenticated()
+        return probe
+
+
+class ProbeRecentAlertListView(APIView):
+    """Legacy recent probe alert endpoint backed by AuditLog."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        logs = AuditLog.objects.filter(action="probes.alert").order_by("-created_at")[:50]
+        schedule_ids = [item.metadata.get("schedule_id") for item in logs if (item.metadata or {}).get("schedule_id")]
+        probe_ids = [item.metadata.get("probe_id") for item in logs if (item.metadata or {}).get("probe_id")]
+        schedules = {str(item.id): item for item in ProbeSchedule.objects.filter(id__in=schedule_ids)}
+        probes = {str(item.id): item for item in ProbeNode.objects.filter(id__in=probe_ids)}
+
+        items = []
+        for item in logs:
+            metadata = item.metadata or {}
+            schedule = schedules.get(str(metadata.get("schedule_id") or ""))
+            probe = probes.get(str(metadata.get("probe_id") or ""))
+            status_value = str(metadata.get("status") or "")
+            severity = "critical" if status_value.lower() == ProbeScheduleExecution.Status.FAILED else "warning"
+            items.append(
+                {
+                    "id": str(item.id),
+                    "schedule_id": str(metadata.get("schedule_id") or ""),
+                    "schedule_name": schedule.name if schedule else "",
+                    "probe_id": str(metadata.get("probe_id") or ""),
+                    "probe_name": probe.name if probe else "",
+                    "status": status_value,
+                    "severity": severity,
+                    "threshold": metadata.get("threshold"),
+                    "message": metadata.get("message") or "",
+                    "created_at": item.created_at.isoformat(),
+                }
+            )
+
+        return Response({"items": items}, status=status.HTTP_200_OK)
 
 
 class ProbeExecutionPagination(PageNumberPagination):
@@ -56,6 +136,31 @@ class ProbeExecutionPagination(PageNumberPagination):
             payload.update(extra)
             self.extra_context = {}
         return Response(payload)
+
+
+class ProbeRegistrationView(APIView):
+    """Probe auto-registration endpoint for agents.
+
+    使用集群级引导 Token 进行认证，返回 node_id + api_token。
+    """
+
+    permission_classes: list = []
+    authentication_classes: list = []
+
+    def post(self, request, *args, **kwargs):
+        bootstrap = request.headers.get("X-Probe-Bootstrap") or ""
+        probe_registration_service.validate_bootstrap_token(bootstrap)
+        serializer = ProbeRegistrationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        node, api_token = probe_registration_service.register_probe(serializer.validated_data)
+        payload = {
+            "node_id": str(node.id),
+            "api_token": api_token,
+            "name": node.name,
+            "location": node.location,
+            "network_type": node.network_type,
+        }
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 def _status_filter_expression(raw_status: str) -> Q:
@@ -98,6 +203,110 @@ class ProbeNodeViewSet(viewsets.ModelViewSet):
                 }
                 for point in history["points"]
             ],
+        }
+        return Response(payload, status=status.HTTP_200_OK)
+
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="health",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def health(self, request, *args, **kwargs):
+        """Return a lightweight health summary for all probe nodes.
+
+        该接口用于前端“探针节点健康”视图，聚合 A+B+C 三类指标：
+        - A：节点可用性（online/maintenance/offline + 心跳延迟）
+        - B：最近一段时间的执行成功/失败统计与失败率
+        - C：平均响应时间（基于结果聚合）
+        """
+        hours = self._parse_int_param(request, "hours", default=1, min_value=1, max_value=24)
+        interval = self._parse_int_param(request, "interval_minutes", default=15, min_value=5, max_value=60)
+
+        nodes = list(ProbeNode.objects.all().order_by("name"))
+        items: list[dict] = []
+
+        # 视为“离线”的心跳延迟阈值（秒）。超过该阈值，即使状态字段仍为 online/maintenance，也按离线处理。
+        offline_threshold_seconds = 5 * 60
+
+        for node in nodes:
+            # A: 基础可用性与心跳延迟
+            heartbeat_delay = None
+            if node.last_heartbeat_at:
+                heartbeat_delay = (timezone.now() - node.last_heartbeat_at).total_seconds()
+
+            # 根据心跳时延推导“有效状态”，避免长时间无心跳却仍显示为在线。
+            effective_status = node.status
+            if heartbeat_delay is None or heartbeat_delay > offline_threshold_seconds:
+                # 维护状态保留原样，其余一律视为离线。
+                if node.status != "maintenance":
+                    effective_status = "offline"
+
+            # B+C: 执行结果统计（成功/失败/平均延迟）
+            stats = probe_metrics_service.get_result_statistics(
+                probe_id=str(node.id),
+                hours=hours,
+                interval_minutes=interval,
+            )
+            total_stats = stats.get("total") or {}
+            success = int(total_stats.get("success") or 0)
+            failed = int(total_stats.get("failed") or 0)
+            executions = success + failed
+            success_rate = float(total_stats.get("success_rate") or 0.0)
+            avg_latency_ms = total_stats.get("avg_latency_ms")
+
+            # D: 运行时长（秒）
+            raw_uptime_seconds = probe_metrics_service.get_latest_uptime(probe_id=str(node.id))
+            # 如果时序库中暂无 uptime 记录，则退化为“自节点创建以来的大致运行时长”，
+            # 这样在开发环境下也能看到一个合理的值。
+            if raw_uptime_seconds is None and node.last_heartbeat_at and node.created_at:
+                try:
+                    delta = node.last_heartbeat_at - node.created_at
+                    raw_uptime_seconds = max(int(delta.total_seconds()), 0)
+                except Exception:
+                    raw_uptime_seconds = None
+            # 仅对“在线”节点展示运行时长；离线节点运行时长显示为空，避免误导。
+            uptime_seconds = raw_uptime_seconds if effective_status == "online" else None
+
+            # E: 最近一次心跳随附的资源快照（CPU / 内存 / 队列等）
+            runtime = node.runtime_metrics or {}
+            cpu_usage = runtime.get("cpu_usage")
+            memory_usage_mb = runtime.get("memory_usage_mb")
+            memory_usage_pct = runtime.get("memory_usage_pct")
+            load_avg = runtime.get("load_avg")
+            queue_depth = runtime.get("task_queue_depth")
+            active_tasks = runtime.get("active_tasks")
+
+            items.append(
+                {
+                    "id": str(node.id),
+                    "name": node.name,
+                    "location": node.location,
+                    "network_type": node.network_type,
+                    "status": effective_status,
+                    "last_heartbeat_at": node.last_heartbeat_at,
+                    "heartbeat_delay_seconds": heartbeat_delay,
+                    "uptime_seconds": uptime_seconds,
+                    "executions": executions,
+                    "success": success,
+                    "failed": failed,
+                    "success_rate": round(success_rate * 100, 2) if executions else 0.0,
+                    "avg_latency_ms": avg_latency_ms,
+                    "cpu_usage": cpu_usage,
+                    "memory_usage_mb": memory_usage_mb,
+                    "memory_usage_pct": memory_usage_pct,
+                    "load_avg": load_avg,
+                    "queue_depth": queue_depth,
+                    "active_tasks": active_tasks,
+                }
+            )
+
+        payload = {
+            "items": items,
+            "window": {
+                "hours": hours,
+                "interval_minutes": interval,
+            },
         }
         return Response(payload, status=status.HTTP_200_OK)
 
@@ -268,75 +477,6 @@ class ProbeNodeViewSet(viewsets.ModelViewSet):
         except (TypeError, ValueError):
             return default
         return max(min_value, min(max_value, value))
-
-
-class RecentProbeAlertView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-    DEFAULT_LIMIT = 10
-    MAX_LIMIT = 50
-
-    def get(self, request, *args, **kwargs):
-        limit = self._parse_limit(request.query_params.get("limit"))
-        logs = list(
-            AuditLog.objects.filter(action="probes.alert")
-            .order_by("-occurred_at")
-            .values("id", "metadata", "occurred_at")[:limit]
-        )
-        if not logs:
-            return Response({"items": []}, status=status.HTTP_200_OK)
-
-        schedule_ids = {entry.get("metadata", {}).get("schedule_id") for entry in logs}
-        probe_ids = {entry.get("metadata", {}).get("probe_id") for entry in logs}
-        schedule_map = {
-            str(schedule.id): schedule.name
-            for schedule in ProbeSchedule.objects.filter(id__in=[sid for sid in schedule_ids if sid]).only("id", "name")
-        }
-        probe_map = {
-            str(probe.id): probe.name
-            for probe in ProbeNode.objects.filter(id__in=[pid for pid in probe_ids if pid]).only("id", "name")
-        }
-
-        records: list[dict] = []
-        for log in logs:
-            metadata = log.get("metadata") or {}
-            schedule_id = metadata.get("schedule_id")
-            probe_id = metadata.get("probe_id")
-            status_value = metadata.get("status") or ""
-            record = {
-                "id": log.get("id"),
-                "execution_id": metadata.get("execution_id"),
-                "schedule_id": schedule_id,
-                "schedule_name": schedule_map.get(str(schedule_id), "") if schedule_id else "",
-                "probe_id": probe_id,
-                "probe_name": probe_map.get(str(probe_id), "") if probe_id else "",
-                "status": status_value,
-                "severity": self._resolve_severity(status_value),
-                "threshold": metadata.get("threshold") or 1,
-                "alert_contacts": metadata.get("alert_contacts") or [],
-                "occurred_at": log.get("occurred_at"),
-                "message": metadata.get("message") or "",
-            }
-            records.append(record)
-
-        serializer = ProbeAlertRecordSerializer(records, many=True)
-        return Response({"items": serializer.data}, status=status.HTTP_200_OK)
-
-    def _parse_limit(self, raw: str | None) -> int:
-        if raw is None:
-            return self.DEFAULT_LIMIT
-        try:
-            value = int(raw)
-        except (TypeError, ValueError):
-            return self.DEFAULT_LIMIT
-        return max(1, min(value, self.MAX_LIMIT))
-
-    def _resolve_severity(self, status_value: str) -> str:
-        normalized = (status_value or "").lower()
-        if normalized == ProbeScheduleExecution.Status.FAILED:
-            return "critical"
-        if normalized == ProbeScheduleExecution.Status.MISSED:
-            return "warning"
-        return "info"
 
 
 class ProbeScheduleViewSet(viewsets.ModelViewSet):

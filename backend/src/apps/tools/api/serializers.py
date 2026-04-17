@@ -77,8 +77,6 @@ class ToolCreateSerializer(serializers.Serializer):
 class ToolExecuteSerializer(serializers.Serializer):
     parameters = serializers.JSONField(required=False)
     script_version_id = serializers.UUIDField(required=False)
-    knowledge_slug = serializers.CharField(required=False, allow_blank=True)
-    knowledge_title = serializers.CharField(required=False, allow_blank=True)
 
     def validate_script_version_id(self, value):
         try:

@@ -189,7 +189,7 @@ services:
   # ============ 前端服务 ============
   frontend:
     build:
-      context: ./frontend
+      context: .
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: /api

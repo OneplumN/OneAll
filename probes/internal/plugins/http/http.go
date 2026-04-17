@@ -45,7 +45,16 @@ func (p *Probe) Execute(ctx context.Context, task api.Task) (api.TaskResult, err
 		return api.TaskResult{Status: "failed", Message: err.Error()}, nil
 	}
 	started := time.Now()
-	resp, err := p.client.Do(req)
+	client := p.client
+	if !metadataBool(task, "follow_redirects", true) {
+		client = &http.Client{
+			Timeout: p.client.Timeout,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return api.TaskResult{Status: "failed", Message: err.Error()}, nil
 	}
@@ -117,6 +126,29 @@ func metadataValue(task api.Task, key string) string {
 	default:
 		return fmt.Sprint(v)
 	}
+}
+
+func metadataBool(task api.Task, key string, fallback bool) bool {
+	if task.Metadata == nil {
+		return fallback
+	}
+	value, ok := task.Metadata[key]
+	if !ok || value == nil {
+		return fallback
+	}
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		lower := strings.ToLower(strings.TrimSpace(v))
+		if lower == "true" || lower == "1" || lower == "yes" {
+			return true
+		}
+		if lower == "false" || lower == "0" || lower == "no" {
+			return false
+		}
+	}
+	return fallback
 }
 
 // ValidateURL ensures target is a valid URL.

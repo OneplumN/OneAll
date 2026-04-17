@@ -17,6 +17,14 @@ class AssetSyncRun(BaseModel):
         FAILED = "failed", "失败"
         SCRIPT_TRIGGERED = "script_triggered", "脚本已触发"
 
+    # 可选关联到某个资产源，便于后续分析「某个外部源最近的同步历史」
+    source = models.ForeignKey(
+        "assets.AssetSource",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sync_runs",
+    )
     mode = models.CharField(max_length=16, choices=Mode.choices, default=Mode.ASYNC)
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.QUEUED)
     source_filters = models.JSONField(default=list, blank=True)
@@ -59,4 +67,3 @@ class AssetSyncChange(BaseModel):
         ordering = ("-created_at",)
         verbose_name = "Asset Sync Change"
         verbose_name_plural = "Asset Sync Changes"
-

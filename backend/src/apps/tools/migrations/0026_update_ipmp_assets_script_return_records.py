@@ -163,7 +163,7 @@ def update_script(apps, schema_editor):
 
     version = CodeRepositoryVersion.objects.create(
         repository=repo,
-        version=timezone.now().strftime("ipmp-sync-%Y%m%d%H%M"),
+        version=timezone.now().strftime("ipmp-sync-%Y%m%d%H%M%S%f"),
         summary="IPMP 项目脚本直接返回记录",
         change_log="不再依赖写入 JSON 临时文件；脚本返回 records，由平台在脚本执行成功后自动入库。",
         content=SCRIPT_BODY,
@@ -181,4 +181,3 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RunPython(update_script, migrations.RunPython.noop),
     ]
-

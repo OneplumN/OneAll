@@ -1,0 +1,74 @@
+.settings-config-page {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-config-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-section {
+  border: 1px solid var(--oa-border-light);
+  border-radius: 12px;
+  background: var(--oa-bg-panel);
+  box-shadow: var(--oa-shadow-sm);
+  padding: 20px;
+}
+
+.settings-section__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.settings-section__title {
+  margin: 0;
+  font-size: var(--oa-font-section-title);
+  font-weight: 600;
+  color: var(--oa-text-primary);
+}
+
+.settings-section__subtitle {
+  margin: 6px 0 0;
+  font-size: var(--oa-font-subtitle);
+  color: var(--oa-text-secondary);
+}
+
+.settings-section__alert {
+  margin-bottom: 16px;
+}
+
+.settings-form :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+
+.settings-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.settings-grid--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 960px) {
+  .settings-grid--two {
+    grid-template-columns: 1fr;
+  }
+}

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
+from apps.alerts.services import ensure_schedule_for_probe_schedule
 from apps.monitoring.models import MonitoringJob
 from apps.probes.models import ProbeNode, ProbeSchedule
 
@@ -53,6 +54,8 @@ def sync_schedule_from_job(job: MonitoringJob) -> ProbeSchedule:
         "next_run_at",
         "updated_at",
     ])
+    # Mirror probe schedule into alerts check/schedule
+    ensure_schedule_for_probe_schedule(schedule)
     return schedule
 
 

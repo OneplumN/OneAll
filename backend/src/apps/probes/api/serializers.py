@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import timedelta
-
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.alerts.services import ensure_schedule_for_probe_schedule
 from apps.monitoring.models import MonitoringRequest
 from apps.probes.models import ProbeNode, ProbeSchedule, ProbeScheduleExecution
+from apps.probes.services.certificate_schedule_service import sync_certificate_schedule_for_https
 
 
 class ProbeNodeSerializer(serializers.ModelSerializer):
@@ -47,6 +47,27 @@ class ProbeNodeSerializer(serializers.ModelSerializer):
 
 class ProbeTokenSerializer(serializers.Serializer):
     token = serializers.CharField(min_length=16, max_length=128)
+
+
+class ProbeRegistrationSerializer(serializers.Serializer):
+    hostname = serializers.CharField(max_length=255)
+    ip_address = serializers.IPAddressField(required=False, allow_null=True)
+    location = serializers.CharField(max_length=128, required=False, allow_blank=True)
+    network_type = serializers.ChoiceField(
+        choices=[choice[0] for choice in ProbeNode.NETWORK_TYPES],
+        required=False,
+    )
+    supported_protocols = serializers.ListField(
+        child=serializers.CharField(max_length=64),
+        required=False,
+        allow_empty=True,
+    )
+    agent_version = serializers.CharField(max_length=128, required=False, allow_blank=True)
+    labels = serializers.DictField(
+        child=serializers.CharField(max_length=256),
+        required=False,
+        allow_empty=True,
+    )
 
 
 class UpdateInstructionSerializer(serializers.Serializer):
@@ -120,6 +141,14 @@ class ProbeScheduleSerializer(serializers.ModelSerializer):
         allow_empty=True,
         write_only=True,
     )
+    alert_channels = serializers.ListField(
+        child=serializers.CharField(allow_blank=False, max_length=64),
+        required=False,
+        allow_empty=True,
+        write_only=True,
+    )
+    cert_check_enabled = serializers.BooleanField(required=False, write_only=True)
+    cert_warning_days = serializers.IntegerField(required=False, min_value=1, max_value=365, write_only=True)
 
     class Meta:
         model = ProbeSchedule
@@ -153,6 +182,9 @@ class ProbeScheduleSerializer(serializers.ModelSerializer):
             "expected_status_codes",
             "alert_threshold",
             "alert_contacts",
+            "alert_channels",
+            "cert_check_enabled",
+            "cert_warning_days",
         ]
         read_only_fields = [
             "id",
@@ -184,12 +216,14 @@ class ProbeScheduleSerializer(serializers.ModelSerializer):
         validated_data.pop("metadata", None)
         metadata_updates = self._pop_metadata_fields(validated_data)
         start_at = validated_data.get("start_at") or timezone.now()
-        frequency = validated_data.get("frequency_minutes") or 1
-        next_run = start_at + timedelta(minutes=frequency)
         validated_data.setdefault("start_at", start_at)
-        validated_data.setdefault("next_run_at", next_run)
+        validated_data.setdefault("next_run_at", start_at)
         schedule = ProbeSchedule.objects.create(metadata=metadata_updates or {}, **validated_data)
         self._assign_probes(schedule, probe_ids)
+        # 手工探针调度创建时，生成对应的 AlertCheck / AlertSchedule，方便中央调度接管。
+        ensure_schedule_for_probe_schedule(schedule)
+        # 若为 HTTPS 手工策略，按需同步配对的 CERTIFICATE 调度（证书检测）。
+        sync_certificate_schedule_for_https(schedule)
         return schedule
 
     def _assign_probes(self, schedule: ProbeSchedule, probe_ids: list) -> None:
@@ -210,6 +244,9 @@ class ProbeScheduleSerializer(serializers.ModelSerializer):
             if schedule.source_type != ProbeSchedule.Source.MANUAL:
                 raise serializers.ValidationError({"probe_ids": "非手工调度不支持修改探针"})
             self._assign_probes(schedule, probe_ids)
+        # 更新手工策略后，无论改的是基础字段还是 metadata，都同步刷新 alerts 映射与证书配对策略。
+        ensure_schedule_for_probe_schedule(schedule)
+        sync_certificate_schedule_for_https(schedule)
         return schedule
 
     def to_representation(self, instance):
@@ -219,6 +256,9 @@ class ProbeScheduleSerializer(serializers.ModelSerializer):
         data["expected_status_codes"] = metadata.get("expected_status_codes") or []
         data["alert_threshold"] = metadata.get("alert_threshold")
         data["alert_contacts"] = metadata.get("alert_contacts") or []
+        data["alert_channels"] = metadata.get("alert_channels") or []
+        data["cert_check_enabled"] = metadata.get("cert_check_enabled", False)
+        data["cert_warning_days"] = metadata.get("cert_warning_days")
         return data
 
     def _pop_metadata_fields(self, validated_data: dict) -> dict:
@@ -240,6 +280,25 @@ class ProbeScheduleSerializer(serializers.ModelSerializer):
         if alert_contacts is not None:
             cleaned = [contact.strip() for contact in alert_contacts if contact]
             metadata["alert_contacts"] = cleaned
+
+        alert_channels = validated_data.pop("alert_channels", None)
+        if alert_channels is not None:
+            cleaned_channels = [
+                str(channel).strip() for channel in alert_channels if str(channel).strip()
+            ]
+            if cleaned_channels:
+                metadata["alert_channels"] = cleaned_channels
+
+        cert_enabled = validated_data.pop("cert_check_enabled", None)
+        if cert_enabled is not None:
+            metadata["cert_check_enabled"] = bool(cert_enabled)
+
+        cert_warning_days = validated_data.pop("cert_warning_days", None)
+        if cert_warning_days is not None:
+            days = int(cert_warning_days)
+            metadata["cert_warning_days"] = days
+            # 同时写入通用的 warning_threshold_days，方便 CERTIFICATE 探针直接读取。
+            metadata["warning_threshold_days"] = days
 
         return metadata
 
@@ -291,18 +350,3 @@ class ProbeScheduleExecutionSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"probe_ids": "非手工调度不支持修改探针"})
             self._assign_probes(schedule, probe_ids)
         return schedule
-
-
-class ProbeAlertRecordSerializer(serializers.Serializer):
-    id = serializers.UUIDField()
-    execution_id = serializers.UUIDField(allow_null=True)
-    schedule_id = serializers.UUIDField(allow_null=True)
-    schedule_name = serializers.CharField(allow_blank=True)
-    probe_id = serializers.UUIDField(allow_null=True)
-    probe_name = serializers.CharField(allow_blank=True)
-    status = serializers.CharField()
-    severity = serializers.CharField()
-    threshold = serializers.IntegerField()
-    alert_contacts = serializers.ListField(child=serializers.CharField(), allow_empty=True)
-    occurred_at = serializers.DateTimeField()
-    message = serializers.CharField()

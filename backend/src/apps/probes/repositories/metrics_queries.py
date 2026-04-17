@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Iterable, List
+from typing import Iterable, List, Optional
 
 from django.db import connections
 from django.db.utils import ConnectionDoesNotExist
@@ -20,6 +20,8 @@ def _get_connection():
 @dataclass
 class RuntimePoint:
     timestamp: datetime
+    cpu_usage: float
+    memory_usage_mb: float
     queue_depth: float
     active_workers: float
     tasks_executed: float
@@ -49,6 +51,8 @@ def fetch_runtime_timeseries(
     sql = """
         SELECT
             time_bucket(%s::interval, recorded_at) AS bucket,
+            AVG(cpu_usage) AS cpu_usage,
+            AVG(memory_usage_mb) AS memory_usage_mb,
             AVG(queue_depth) AS queue_depth,
             AVG(active_workers) AS active_workers,
             AVG(tasks_executed) AS tasks_executed,
@@ -64,12 +68,14 @@ def fetch_runtime_timeseries(
     with conn.cursor() as cursor:
         cursor.execute(sql, params)
         rows = cursor.fetchall()
-        for bucket, queue_depth, active_workers, tasks_executed, heartbeats_sent in rows:
+        for bucket, cpu_usage, memory_usage_mb, queue_depth, active_workers, tasks_executed, heartbeats_sent in rows:
             if bucket is None:
                 continue
             points.append(
                 RuntimePoint(
                     timestamp=bucket,
+                    cpu_usage=float(cpu_usage or 0),
+                    memory_usage_mb=float(memory_usage_mb or 0),
                     queue_depth=float(queue_depth or 0),
                     active_workers=float(active_workers or 0),
                     tasks_executed=float(tasks_executed or 0),
@@ -119,3 +125,35 @@ def fetch_result_buckets(
                 )
             )
     return points
+
+
+def fetch_latest_uptime(*, probe_id: str) -> Optional[int]:
+    """Return the latest uptime_seconds snapshot for a probe, if any."""
+
+    conn = _get_connection()
+    if conn is None:
+        return None
+
+    sql = """
+        SELECT uptime_seconds
+        FROM probe_runtime_metrics
+        WHERE probe_id = %s
+        ORDER BY recorded_at DESC
+        LIMIT 1
+    """
+    params: Iterable = (str(probe_id),)
+
+    with conn.cursor() as cursor:
+        cursor.execute(sql, params)
+        row = cursor.fetchone()
+
+    if not row:
+        return None
+
+    value = row[0]
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None

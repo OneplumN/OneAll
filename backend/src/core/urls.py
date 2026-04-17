@@ -16,7 +16,6 @@ urlpatterns = [
     path("api/", include("apps.settings.api.urls")),
     path("api/", include("apps.monitoring.api.urls")),
     path("api/", include("apps.assets.api.urls")),
-    path("api/", include("apps.analytics.api.urls")),
     path("api/", include("apps.tools.api.urls")),
-    path("api/", include("apps.knowledge.api.urls")),
+    path("api/", include("apps.alerts.api.urls")),
 ]

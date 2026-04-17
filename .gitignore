@@ -30,6 +30,7 @@ probes/bin/probe
 
 # Editor & OS files
 .DS_Store
+._*
 Thumbs.db
 *.tmp
 *.swp

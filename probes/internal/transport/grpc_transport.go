@@ -12,8 +12,11 @@ import (
 
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -27,13 +30,13 @@ type GRPCTransport struct {
 	cfg        config.Config
 	logger     zerolog.Logger
 	protocols  []string
+	baseCtx    context.Context
+	baseCancel context.CancelFunc
 	conn       *grpc.ClientConn
 	client     gateway.ProbeGatewayClient
 	stream     gateway.ProbeGateway_ConnectClient
 	sendMu     sync.Mutex
 	tasks      chan api.Task
-	errMu      sync.RWMutex
-	recvErr    error
 	cancelFunc context.CancelFunc
 	commands   chan Command
 }
@@ -43,7 +46,8 @@ func NewGRPCTransport(ctx context.Context, cfg config.Config, protocols []string
 	if cfg.GRPCGateway == "" {
 		return nil, errors.New("grpc gateway address required")
 	}
-	dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	baseCtx, baseCancel := context.WithCancel(ctx)
+	dialCtx, cancel := context.WithTimeout(baseCtx, 10*time.Second)
 	defer cancel()
 
 	dialOpt, err := buildDialCredentials(cfg)
@@ -56,32 +60,41 @@ func NewGRPCTransport(ctx context.Context, cfg config.Config, protocols []string
 		cfg.GRPCGateway,
 		dialOpt,
 		grpc.WithBlock(),
+		grpc.WithConnectParams(grpc.ConnectParams{
+			Backoff: backoff.Config{
+				BaseDelay:  time.Second,
+				Multiplier: 1.6,
+				Jitter:     0.2,
+				MaxDelay:   10 * time.Second,
+			},
+			MinConnectTimeout: 10 * time.Second,
+		}),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			// Application-level heartbeats are sent every 30s, so transport keepalive
+			// only needs to catch very long idle periods. A 120s ping cadence was
+			// strongly correlated with stream resets in local debugging.
+			Time:                10 * time.Minute,
+			Timeout:             20 * time.Second,
+			PermitWithoutStream: true,
+		}),
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	client := gateway.NewProbeGatewayClient(conn)
-	streamCtx, streamCancel := context.WithCancel(ctx)
-	stream, err := client.Connect(streamCtx)
-	if err != nil {
-		streamCancel()
-		_ = conn.Close()
-		return nil, err
-	}
-
 	t := &GRPCTransport{
 		cfg:        cfg,
 		logger:     logger,
 		protocols:  protocols,
+		baseCtx:    baseCtx,
+		baseCancel: baseCancel,
 		conn:       conn,
 		client:     client,
-		stream:     stream,
 		tasks:      make(chan api.Task, 128),
 		commands:   make(chan Command, 16),
-		cancelFunc: streamCancel,
 	}
-	if err := t.sendHello(); err != nil {
+	if err := t.reconnectStream(); err != nil {
 		t.Close()
 		return nil, err
 	}
@@ -107,11 +120,32 @@ func (t *GRPCTransport) sendHello() error {
 func (t *GRPCTransport) readLoop() {
 	defer close(t.commands)
 	for {
-		response, err := t.stream.Recv()
+		stream := t.currentStream()
+		if stream == nil {
+			if t.baseCtx.Err() != nil {
+				return
+			}
+			if err := t.reconnectStream(); err != nil {
+				t.logger.Warn().Err(err).Msg("grpc stream reconnect aborted")
+				return
+			}
+			continue
+		}
+
+		response, err := stream.Recv()
 		if err != nil {
-			t.setError(err)
-			close(t.tasks)
-			return
+			if t.baseCtx.Err() != nil {
+				return
+			}
+			t.logger.Warn().
+				Err(err).
+				Str("connection_state", t.connectionState()).
+				Msg("grpc stream receive failed")
+			if reconnectErr := t.reconnectStream(); reconnectErr != nil {
+				t.logger.Warn().Err(reconnectErr).Msg("grpc stream reconnect failed")
+				return
+			}
+			continue
 		}
 		switch response.Body.(type) {
 		case *gateway.ServerMessage_Task:
@@ -169,26 +203,18 @@ func (t *GRPCTransport) readLoop() {
 	}
 }
 
-func (t *GRPCTransport) setError(err error) {
-	t.errMu.Lock()
-	defer t.errMu.Unlock()
-	if t.recvErr == nil {
-		t.recvErr = err
-	}
-}
-
-func (t *GRPCTransport) getError() error {
-	t.errMu.RLock()
-	defer t.errMu.RUnlock()
-	return t.recvErr
-}
-
 func (t *GRPCTransport) SendHeartbeat(ctx context.Context, payload api.HeartbeatRequest) error {
+	// 优先上传“内存使用率（百分比）”而不是绝对 MB 数。
+	// 为了兼容旧逻辑，如果百分比不存在，则退回到 MB。
+	memPct, ok := payload.Metrics["memory_usage_pct"]
+	if !ok {
+		memPct = payload.Metrics["memory_usage_mb"]
+	}
 	heartbeat := &gateway.Heartbeat{
 		SentAt:        timestamppb.New(payload.SentAt),
 		Status:        payload.Status,
 		CpuUsage:      payload.Metrics["cpu_usage"],
-		MemoryUsageMb: payload.Metrics["memory_usage_mb"],
+		MemoryUsageMb: memPct,
 		QueueDepth:    uint32(payload.Metrics["queue_depth"]),
 		ActiveTasks:   uint32(payload.Metrics["active_tasks"]),
 		IpAddress:     payload.IPAddress,
@@ -199,9 +225,6 @@ func (t *GRPCTransport) SendHeartbeat(ctx context.Context, payload api.Heartbeat
 }
 
 func (t *GRPCTransport) FetchTasks(ctx context.Context, limit int) ([]api.Task, error) {
-	if err := t.getError(); err != nil {
-		return nil, err
-	}
 	if limit <= 0 {
 		limit = 1
 	}
@@ -222,9 +245,6 @@ func (t *GRPCTransport) FetchTasks(ctx context.Context, limit int) ([]api.Task, 
 		select {
 		case task, ok := <-t.tasks:
 			if !ok {
-				if err := t.getError(); err != nil {
-					return collected, err
-				}
 				return collected, errors.New("task channel closed")
 			}
 			collected = append(collected, task)
@@ -265,15 +285,15 @@ func (t *GRPCTransport) SubmitResult(ctx context.Context, result api.TaskResult)
 	if !result.ScheduledAt.IsZero() {
 		payload.ScheduledAt = timestamppb.New(result.ScheduledAt)
 	}
+	if !result.FinishedAt.IsZero() {
+		payload.FinishedAt = timestamppb.New(result.FinishedAt)
+	}
 	return t.send(&gateway.ProbeMessage{
 		Body: &gateway.ProbeMessage_Result{Result: payload},
 	})
 }
 
 func (t *GRPCTransport) PublishMetrics(ctx context.Context, payload api.MetricsPayload) error {
-	if err := t.getError(); err != nil {
-		return err
-	}
 	metrics := &gateway.RuntimeMetrics{
 		UptimeSeconds: uint64(payload.UptimeSeconds),
 		Heartbeats: &gateway.HeartbeatStats{
@@ -306,20 +326,43 @@ func (t *GRPCTransport) PublishMetrics(ctx context.Context, payload api.MetricsP
 }
 
 func (t *GRPCTransport) send(msg *gateway.ProbeMessage) error {
-	if err := t.getError(); err != nil {
-		return err
-	}
 	t.sendMu.Lock()
 	defer t.sendMu.Unlock()
-	return t.stream.Send(msg)
+
+	if t.baseCtx.Err() != nil {
+		return t.baseCtx.Err()
+	}
+	if t.stream == nil {
+		return errors.New("grpc stream is not connected")
+	}
+	if err := t.stream.Send(msg); err != nil {
+		t.logger.Warn().
+			Err(err).
+			Str("message_type", messageType(msg)).
+			Str("connection_state", t.connectionState()).
+			Msg("grpc stream send failed")
+		return err
+	}
+	return nil
 }
 
 func (t *GRPCTransport) Close() error {
-	if t.cancelFunc != nil {
-		t.cancelFunc()
+	if t.baseCancel != nil {
+		t.baseCancel()
 	}
-	if t.stream != nil {
-		_ = t.stream.CloseSend()
+
+	t.sendMu.Lock()
+	stream := t.stream
+	streamCancel := t.cancelFunc
+	t.stream = nil
+	t.cancelFunc = nil
+	t.sendMu.Unlock()
+
+	if streamCancel != nil {
+		streamCancel()
+	}
+	if stream != nil {
+		_ = stream.CloseSend()
 	}
 	if t.conn != nil {
 		return t.conn.Close()
@@ -329,6 +372,24 @@ func (t *GRPCTransport) Close() error {
 
 func (t *GRPCTransport) Commands() <-chan Command {
 	return t.commands
+}
+
+func (t *GRPCTransport) Tasks() <-chan api.Task {
+	return t.tasks
+}
+
+func (t *GRPCTransport) AcknowledgeTask(ctx context.Context, taskID string) error {
+	if taskID == "" {
+		return nil
+	}
+	return t.send(&gateway.ProbeMessage{
+		Body: &gateway.ProbeMessage_TaskAck{
+			TaskAck: &gateway.TaskAck{
+				TaskId:     taskID,
+				ReceivedAt: timestamppb.Now(),
+			},
+		},
+	})
 }
 
 func (t *GRPCTransport) handleConfigUpdate(update *gateway.ConfigUpdate) {
@@ -386,4 +447,79 @@ func buildDialCredentials(cfg config.Config) (grpc.DialOption, error) {
 		tlsConfig.Certificates = []tls.Certificate{certificate}
 	}
 	return grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)), nil
+}
+
+func (t *GRPCTransport) reconnectStream() error {
+	backoffDelay := time.Second
+
+	for {
+		if t.baseCtx.Err() != nil {
+			return t.baseCtx.Err()
+		}
+
+		streamCtx, streamCancel := context.WithCancel(t.baseCtx)
+		stream, err := t.client.Connect(streamCtx)
+		if err == nil {
+			t.sendMu.Lock()
+			oldStream := t.stream
+			oldCancel := t.cancelFunc
+			t.stream = stream
+			t.cancelFunc = streamCancel
+			t.sendMu.Unlock()
+
+			if oldCancel != nil {
+				oldCancel()
+			}
+			if oldStream != nil {
+				_ = oldStream.CloseSend()
+			}
+
+			if err := t.sendHello(); err != nil {
+				t.logger.Warn().Err(err).Msg("grpc stream hello failed after reconnect")
+				streamCancel()
+				_ = stream.CloseSend()
+			} else {
+				t.logger.Info().
+					Str("connection_state", t.connectionState()).
+					Msg("grpc stream connected")
+				return nil
+			}
+		} else {
+			streamCancel()
+			t.logger.Warn().Err(err).Msg("grpc stream reconnect attempt failed")
+		}
+
+		select {
+		case <-t.baseCtx.Done():
+			return t.baseCtx.Err()
+		case <-time.After(backoffDelay):
+		}
+
+		if backoffDelay < 10*time.Second {
+			backoffDelay *= 2
+			if backoffDelay > 10*time.Second {
+				backoffDelay = 10 * time.Second
+			}
+		}
+	}
+}
+
+func (t *GRPCTransport) currentStream() gateway.ProbeGateway_ConnectClient {
+	t.sendMu.Lock()
+	defer t.sendMu.Unlock()
+	return t.stream
+}
+
+func (t *GRPCTransport) connectionState() string {
+	if t == nil || t.conn == nil {
+		return connectivity.Idle.String()
+	}
+	return t.conn.GetState().String()
+}
+
+func messageType(msg *gateway.ProbeMessage) string {
+	if msg == nil || msg.Body == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("%T", msg.Body)
 }

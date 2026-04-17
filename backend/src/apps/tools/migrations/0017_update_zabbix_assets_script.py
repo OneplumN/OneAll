@@ -136,7 +136,7 @@ def apply_script_update(apps, schema_editor):
 
     version = CodeRepositoryVersion.objects.create(
         repository=repo,
-        version=timezone.now().strftime("zabbix-sync-%Y%m%d%H%M"),
+        version=timezone.now().strftime("zabbix-sync-%Y%m%d%H%M%S%f"),
         summary="补齐 Zabbix 主机同步脚本",
         change_log="读取 CONFIG / 环境变量并写入 ASSET_SYNC_ZABBIX_FILE，供资产同步使用。",
         content=SCRIPT_BODY,

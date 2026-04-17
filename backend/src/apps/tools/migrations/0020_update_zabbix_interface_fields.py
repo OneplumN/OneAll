@@ -171,7 +171,7 @@ def update_script(apps, schema_editor):
 
     version = CodeRepositoryVersion.objects.create(
         repository=repo,
-        version=timezone.now().strftime("zabbix-sync-%Y%m%d%H%M"),
+        version=timezone.now().strftime("zabbix-sync-%Y%m%d%H%M%S%f"),
         summary="扩展接口类型与可用性字段",
         change_log="同步 Zabbix 主机时，记录接口类型/可用性标签，供前端展示。",
         content=SCRIPT_BODY,

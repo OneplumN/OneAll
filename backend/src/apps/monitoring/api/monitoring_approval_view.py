@@ -47,6 +47,36 @@ class MonitoringRequestApproveView(APIView):
         return Response(MonitoringRequestSerializer(monitoring_request).data, status=status.HTTP_200_OK)
 
 
+class MonitoringRequestStatusCallbackView(APIView):
+    """Legacy ITSM callback endpoint kept for compatibility."""
+
+    permission_classes = [permissions.AllowAny]
+    authentication_classes: list = []
+
+    def patch(self, request: Request, pk: str) -> Response:
+        monitoring_request = get_object_or_404(MonitoringRequest, pk=pk)
+
+        ticket_id = str((request.data or {}).get("itsm_ticket_id") or "").strip()
+        if ticket_id and monitoring_request.itsm_ticket_id and monitoring_request.itsm_ticket_id != ticket_id:
+            return Response({"detail": "itsm_ticket_id 不匹配"}, status=status.HTTP_400_BAD_REQUEST)
+
+        next_status = str((request.data or {}).get("status") or "").strip().lower()
+        approver = str((request.data or {}).get("approver") or "").strip() or None
+        reason = str((request.data or {}).get("reason") or "").strip() or None
+
+        if next_status == MonitoringRequest.Status.APPROVED:
+            monitoring_request.mark_approved(approver)
+            from apps.monitoring.services import monitoring_job_service
+
+            monitoring_job_service.create_job_for_request(monitoring_request)
+        elif next_status == MonitoringRequest.Status.REJECTED:
+            monitoring_request.mark_rejected(reason or approver)
+        else:
+            return Response({"detail": "不支持的状态更新"}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(MonitoringRequestSerializer(monitoring_request).data, status=status.HTTP_200_OK)
+
+
 class MonitoringRequestRejectView(APIView):
     """
     平台内审批：驳回

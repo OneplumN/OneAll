@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from django.db import transaction
 from django.utils import timezone
 
+from apps.alerts.models import AlertCheckExecution, AlertSchedule
 from apps.probes.models import ProbeNode, ProbeSchedule, ProbeScheduleExecution
 from . import probe_alert_service
 
@@ -48,6 +49,7 @@ def record_result(
             update_fields=["status", "response_time_ms", "status_code", "message", "metadata", "finished_at", "updated_at"]
         )
         _update_schedule_runtime(schedule=schedule, scheduled_at=scheduled_at)
+        _record_alert_check_execution_for_probe_execution(execution)
     probe_alert_service.evaluate_probe_alert(execution)
     return execution
 
@@ -92,3 +94,31 @@ def _apply_expected_status_codes(
     if numeric_code in normalized:
         return ProbeScheduleExecution.Status.SUCCEEDED
     return status
+
+
+def _record_alert_check_execution_for_probe_execution(execution: ProbeScheduleExecution) -> None:
+    """Mirror a ProbeScheduleExecution into AlertCheckExecution for unified alert handling."""
+
+    schedule = execution.schedule
+    try:
+        alert_schedule = AlertSchedule.objects.get(alert_check__source_id=schedule.id)
+    except AlertSchedule.DoesNotExist:
+        return
+
+    AlertCheckExecution.objects.update_or_create(
+        source_type="probe_schedule_execution",
+        source_id=execution.id,
+        defaults={
+            "schedule": alert_schedule,
+            "executor_type": AlertCheckExecution.executor_type.field.default,
+            "executor_ref": str(execution.probe_id),
+            "scheduled_at": execution.scheduled_at,
+            "started_at": execution.started_at,
+            "finished_at": execution.finished_at or timezone.now(),
+            "status": execution.status,
+            "response_time_ms": execution.response_time_ms,
+            "status_code": execution.status_code,
+            "error_message": execution.message,
+            "result_payload": execution.metadata or {},
+        },
+    )

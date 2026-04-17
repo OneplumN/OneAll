@@ -83,3 +83,38 @@ def test_update_schedule_persists_metadata_fields():
     assert schedule.metadata["expected_status_codes"] == [300]
     assert schedule.metadata["alert_threshold"] == 2
     assert schedule.metadata["alert_contacts"] == ["foo@example.com"]
+
+
+@pytest.mark.django_db
+def test_update_schedule_persists_alert_channels_and_certificate_fields():
+    probe = ProbeNode.objects.create(
+        name="node-c",
+        location="Guangzhou",
+        network_type="internal",
+        supported_protocols=["HTTPS", "CERTIFICATE"],
+    )
+    schedule = ProbeSchedule.objects.create(
+        name="cert-editable",
+        target="https://example.com",
+        protocol="HTTPS",
+        frequency_minutes=5,
+        source_type=ProbeSchedule.Source.MANUAL,
+        status=ProbeSchedule.Status.ACTIVE,
+        metadata={},
+    )
+    schedule.probes.add(probe)
+
+    payload = {
+        "alert_channels": ["email", "http"],
+        "cert_check_enabled": True,
+        "cert_warning_days": 15,
+    }
+    serializer = ProbeScheduleSerializer(instance=schedule, data=payload, partial=True)
+    assert serializer.is_valid(), serializer.errors
+    serializer.save()
+    schedule.refresh_from_db()
+
+    assert schedule.metadata["alert_channels"] == ["email", "http"]
+    assert schedule.metadata["cert_check_enabled"] is True
+    assert schedule.metadata["cert_warning_days"] == 15
+    assert schedule.metadata["warning_threshold_days"] == 15

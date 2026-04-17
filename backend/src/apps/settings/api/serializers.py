@@ -3,7 +3,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from apps.core.models.user import Role, User
-from apps.settings.models import AlertTemplate, PluginConfig, SystemSettings, ZABBIX_REFRESH_INTERVALS
+from apps.settings.models import AlertTemplate, PluginConfig, SystemSettings
 from apps.settings.services.alert_channel_service import CHANNEL_DEFINITIONS
 from apps.settings.services.template_renderer import ALERT_VARIABLES, validate_alert_template
 from apps.settings.utils import build_permission_catalog, get_all_permissions
@@ -14,44 +14,6 @@ from apps.core.roles import get_primary_role
 class NotificationChannelsSerializer(serializers.Serializer):
     email = serializers.EmailField(required=False, allow_blank=True)
     webhook = serializers.URLField(required=False, allow_blank=True)
-
-
-class ITSMIntegrationSerializer(serializers.Serializer):
-    base_url = serializers.URLField(required=False, allow_blank=True)
-    client_id = serializers.CharField(required=False, allow_blank=True)
-    client_secret = serializers.CharField(required=False, allow_blank=True, write_only=True)
-    has_client_secret = serializers.SerializerMethodField()
-
-    def get_has_client_secret(self, obj):
-        return bool(obj.get("client_secret"))
-
-
-class ZabbixIntegrationSerializer(serializers.Serializer):
-    base_url = serializers.URLField(required=False, allow_blank=True)
-    username = serializers.CharField(required=False, allow_blank=True)
-    password = serializers.CharField(required=False, allow_blank=True, write_only=True)
-    has_password = serializers.SerializerMethodField()
-
-    def get_has_password(self, obj):
-        return bool(obj.get("password"))
-
-
-class PrometheusIntegrationSerializer(serializers.Serializer):
-    base_url = serializers.URLField(required=False, allow_blank=True)
-    bearer_token = serializers.CharField(required=False, allow_blank=True, write_only=True)
-    has_bearer_token = serializers.SerializerMethodField()
-
-    def get_has_bearer_token(self, obj):
-        return bool(obj.get("bearer_token"))
-
-
-class CMDBIntegrationSerializer(serializers.Serializer):
-    endpoint = serializers.URLField(required=False, allow_blank=True)
-    token = serializers.CharField(required=False, allow_blank=True, write_only=True)
-    has_token = serializers.SerializerMethodField()
-
-    def get_has_token(self, obj):
-        return bool(obj.get("token"))
 
 
 class LDAPIntegrationSerializer(serializers.Serializer):
@@ -78,11 +40,16 @@ class LDAPIntegrationSerializer(serializers.Serializer):
 
 
 class IntegrationsSerializer(serializers.Serializer):
-    itsm = ITSMIntegrationSerializer(required=False)
-    zabbix = ZabbixIntegrationSerializer(required=False)
-    prometheus = PrometheusIntegrationSerializer(required=False)
-    cmdb = CMDBIntegrationSerializer(required=False)
     ldap = LDAPIntegrationSerializer(required=False)
+    # 资产中心相关配置，目前主要用于定义各资产类型的唯一键字段等，结构保持为开放 JSON：
+    # {
+    #   "types": {
+    #     "cmdb-domain": { "unique_fields": ["domain"] },
+    #     "zabbix-host": { "unique_fields": ["ip", "host_name"] },
+    #     ...
+    #   }
+    # }
+    assets = serializers.JSONField(required=False)
 
 
 class SystemSettingsSerializer(serializers.ModelSerializer):
@@ -97,59 +64,12 @@ class SystemSettingsSerializer(serializers.ModelSerializer):
             "platform_logo",
             "default_timezone",
             "alert_escalation_threshold",
-            "zabbix_dashboard_refresh_seconds",
-            "certificate_expiry_threshold_critical_days",
-            "certificate_expiry_threshold_warning_days",
-            "certificate_expiry_threshold_notice_days",
             "theme",
             "notification_channels",
             "integrations",
             "updated_at",
         ]
         read_only_fields = ["id", "updated_at"]
-
-    def validate_zabbix_dashboard_refresh_seconds(self, value):
-        if value not in ZABBIX_REFRESH_INTERVALS:
-            raise serializers.ValidationError(
-                "刷新频率必须为 30 秒、1 分钟、5 分钟、15 分钟、30 分钟或 1 小时之一"
-            )
-        return value
-
-    def validate(self, attrs):
-        attrs = super().validate(attrs)
-
-        critical = attrs.get("certificate_expiry_threshold_critical_days")
-        warning = attrs.get("certificate_expiry_threshold_warning_days")
-        notice = attrs.get("certificate_expiry_threshold_notice_days")
-
-        if self.instance is not None:
-            if critical is None:
-                critical = getattr(self.instance, "certificate_expiry_threshold_critical_days", None)
-            if warning is None:
-                warning = getattr(self.instance, "certificate_expiry_threshold_warning_days", None)
-            if notice is None:
-                notice = getattr(self.instance, "certificate_expiry_threshold_notice_days", None)
-
-        errors: dict[str, str] = {}
-        for key, value in [
-            ("certificate_expiry_threshold_critical_days", critical),
-            ("certificate_expiry_threshold_warning_days", warning),
-            ("certificate_expiry_threshold_notice_days", notice),
-        ]:
-            if value is None:
-                continue
-            if int(value) < 1:
-                errors[key] = "必须为大于等于 1 的整数"
-
-        if critical is not None and warning is not None and int(critical) > int(warning):
-            errors["certificate_expiry_threshold_warning_days"] = "必须大于等于严重阈值"
-        if warning is not None and notice is not None and int(warning) > int(notice):
-            errors["certificate_expiry_threshold_notice_days"] = "必须大于等于预警阈值"
-
-        if errors:
-            raise serializers.ValidationError(errors)
-
-        return attrs
 
     def update(self, instance, validated_data):
         notification_channels = validated_data.pop("notification_channels", None)

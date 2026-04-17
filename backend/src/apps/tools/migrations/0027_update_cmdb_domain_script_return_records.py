@@ -164,7 +164,7 @@ def update_script(apps, schema_editor):
 
     version = CodeRepositoryVersion.objects.create(
         repository=repo,
-        version=timezone.now().strftime("cmdb-domain-%Y%m%d%H%M"),
+        version=timezone.now().strftime("cmdb-domain-%Y%m%d%H%M%S%f"),
         summary="域名脚本直接返回 records",
         change_log="不再依赖写入 JSON 临时文件；脚本返回 records，由平台在脚本执行成功后自动入库，并做全量对账软删除。",
         content=SCRIPT_BODY,
@@ -182,4 +182,3 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RunPython(update_script, migrations.RunPython.noop),
     ]
-

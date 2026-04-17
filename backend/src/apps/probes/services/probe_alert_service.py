@@ -1,20 +1,15 @@
 from __future__ import annotations
 
-import json
 import logging
-import smtplib
-from email.message import EmailMessage
-from email.utils import formataddr
 from typing import Iterable, Sequence
 
-import requests
 from django.conf import settings
 from django.utils import timezone
 
+from apps.alerts.services import CheckResult, evaluate_and_raise
+from apps.alerts.tasks import dispatch_alert_event
 from apps.core.models import AuditLog
 from apps.probes.models import ProbeScheduleExecution
-from apps.settings.models import AlertChannel, AlertTemplate
-from apps.settings.services.template_renderer import AlertTemplateError, render_alert_template
 from apps.settings.services.system_settings_service import get_system_settings
 
 logger = logging.getLogger(__name__)
@@ -24,15 +19,6 @@ FAILURE_STATUSES = {
     ProbeScheduleExecution.Status.MISSED,
 }
 ALERT_LOG_ACTION = "probes.alert"
-DEFAULT_TEMPLATE_BODY = (
-    "【${title}】\n"
-    "任务：${task_name}\n"
-    "探针：${probe_name}\n"
-    "状态：${status}\n"
-    "时间：${timestamp}\n"
-    "详情：${message}\n"
-    "${result_url}"
-)
 
 
 def evaluate_probe_alert(execution: ProbeScheduleExecution) -> None:
@@ -63,7 +49,6 @@ def evaluate_probe_alert(execution: ProbeScheduleExecution) -> None:
     context = _build_context(execution, contacts, threshold)
 
     _record_alert(execution, failures, threshold, contacts, context)
-    _send_alert_notifications(context, contacts)
 
 
 def _resolve_threshold(execution: ProbeScheduleExecution) -> int:
@@ -113,6 +98,7 @@ def _resolve_contacts(execution: ProbeScheduleExecution) -> list[str]:
 def _build_context(execution: ProbeScheduleExecution, contacts: Sequence[str], threshold: int) -> dict[str, str]:
     schedule = execution.schedule
     probe = execution.probe
+    metadata = schedule.metadata or {}
     finished_at = execution.finished_at or timezone.now()
     severity = _detect_severity(execution.status)
     system_settings = get_system_settings()
@@ -140,12 +126,24 @@ def _build_context(execution: ProbeScheduleExecution, contacts: Sequence[str], t
         "probe_name": probe.name if probe else "",
         "message": message,
         "result_url": _build_result_url(execution),
+        "alert_channels": metadata.get("alert_channels") or [],
     }
 
 
 def _build_result_url(execution: ProbeScheduleExecution) -> str:
     base = getattr(settings, "CONSOLE_BASE_URL", "") or ""
-    path = f"/#/probes/schedules?scheduleId={execution.schedule_id}&executionId={execution.id}"
+    path = "/#/alerts/checks"
+    try:
+        from apps.alerts.models import AlertCheck
+
+        check = AlertCheck.objects.filter(
+            source_type=AlertCheck.SourceType.PROBE_SCHEDULE,
+            source_id=execution.schedule_id,
+        ).only("id").first()
+        if check:
+            path = f"/#/alerts/checks/{check.id}?executionId={execution.id}"
+    except Exception:  # pragma: no cover - alert link fallback should not break alert creation
+        logger.exception("Failed to resolve alert check result url for probe execution %s", execution.id)
     return f"{base.rstrip('/')}{path}" if base else path
 
 
@@ -165,6 +163,7 @@ def _record_alert(
     contacts: Sequence[str],
     context: dict[str, str],
 ) -> None:
+    # Persist legacy audit log record for backward compatibility / auditing
     AuditLog.objects.create(
         action=ALERT_LOG_ACTION,
         target_type="ProbeSchedule",
@@ -182,179 +181,57 @@ def _record_alert(
         },
     )
 
+    # Also emit a unified AlertEvent into the alerts domain
+    schedule = execution.schedule
+    probe = execution.probe
+    check_context: dict[str, object] = {
+        "execution_id": str(execution.id),
+        "execution_ids": [str(item.id) for item in failures],
+        "schedule_id": str(execution.schedule_id),
+        "schedule_name": schedule.name,
+        "probe_id": str(execution.probe_id) if execution.probe_id else None,
+        "probe_name": probe.name if probe else "",
+        "status": execution.status,
+        "threshold": threshold,
+        "alert_contacts": list(contacts),
+        "message": context.get("message", ""),
+        "target": schedule.target,
+        "status_code": execution.status_code,
+        "response_time_ms": execution.response_time_ms,
+        "scheduled_at": execution.scheduled_at.isoformat(),
+        "finished_at": (execution.finished_at or timezone.now()).isoformat(),
+        "result_url": context.get("result_url"),
+        "severity": context.get("severity"),
+    }
 
-def _send_alert_notifications(context: dict[str, str], contacts: Sequence[str]) -> None:
-    channels = list(AlertChannel.objects.filter(enabled=True))
-    if not channels:
-        logger.warning("探针告警已触发但没有启用的告警通道，跳过发送")
-        return
-
-    for channel in channels:
-        try:
-            subject, body = _render_for_channel(channel.channel_type, context)
-            _dispatch_to_channel(channel, subject, body, contacts, context)
-        except Exception:
-            logger.exception("Failed to dispatch alert via channel %s", channel.channel_type)
-
-
-def _render_for_channel(channel_type: str, context: dict[str, str]) -> tuple[str, str]:
-    template = (
-        AlertTemplate.objects.filter(channel_type=channel_type)
-        .order_by("-is_default", "-updated_at")
-        .first()
+    result = CheckResult(
+        source="probes",
+        event_type="probe_schedule_alert",
+        severity=context.get("severity") or _detect_severity(execution.status),
+        title=context.get("title") or f"{schedule.name} 探针告警",
+        message=context.get("message", ""),
+        status=execution.status,
+        task_id=str(execution.schedule_id),
+        probe_id=str(execution.probe_id) if execution.probe_id else None,
+        context=check_context,
     )
-    subject_template = template.subject if template and template.subject else context["title"]
-    body_template = template.body if template else DEFAULT_TEMPLATE_BODY
+    event = evaluate_and_raise(result)
+    # Fan out to the unified alerts pipeline asynchronously.
+    _enqueue_alert_dispatch(str(event.id))
+
+
+def _enqueue_alert_dispatch(event_id: str) -> None:
     try:
-        subject = render_alert_template(subject_template, context)
-    except AlertTemplateError:
-        subject = context["title"]
-    try:
-        body = render_alert_template(body_template, context)
-    except AlertTemplateError:
-        body = (
-            f"{context['title']}\n"
-            f"任务：{context['task_name']}\n"
-            f"探针：{context['probe_name']}\n"
-            f"状态：{context['status']}\n"
-            f"时间：{context['timestamp']}\n"
-            f"详情：{context['message']}\n"
-            f"{context['result_url']}"
-        )
-    if not subject:
-        subject = context["title"]
-    return subject, body
+        dispatch_alert_event.delay(event_id)
+    except Exception:  # pragma: no cover - broker degradation should not break result ingestion
+        logger.exception("Failed to enqueue probe alert event %s", event_id)
 
 
-def _dispatch_to_channel(
-    channel: AlertChannel,
-    subject: str,
-    body: str,
-    contacts: Sequence[str],
-    context: dict[str, str],
-) -> None:
-    channel_type = channel.channel_type
-    if channel_type == "email":
-        _send_email(channel, subject, body, contacts)
-    elif channel_type == "wecom":
-        _send_wecom(channel, subject, body, contacts)
-    elif channel_type == "dingtalk":
-        _send_dingtalk(channel, subject, body, contacts)
-    elif channel_type == "lark":
-        _send_lark(channel, subject, body)
-    elif channel_type == "http":
-        _send_http_callback(channel, subject, body, context)
-    else:
-        logger.info("Channel %s is not supported for automatic alerts", channel_type)
+def _dispatch_to_channel(*args, **kwargs) -> None:
+    """Legacy test shim.
 
+    历史测试会 patch 这个符号，但当前统一告警链路已经不再直接从 probe_alert_service 发送通知。
+    保留一个空实现，避免兼容测试在 import 阶段失败。
+    """
 
-def _send_email(channel: AlertChannel, subject: str, body: str, contacts: Sequence[str]) -> None:
-    if not contacts:
-        logger.warning("Email channel %s skipped due to empty recipients", channel.channel_type)
-        return
-    config = channel.config or {}
-    host = config.get("smtp_host")
-    port = int(config.get("smtp_port") or 25)
-    use_tls = bool(config.get("use_tls", True))
-    username = config.get("username")
-    password = config.get("password")
-    from_email = config.get("from_email") or username
-    from_name = config.get("from_name") or from_email
-    if not host or not from_email:
-        raise ValueError("SMTP 配置不完整")
-
-    message = EmailMessage()
-    message["Subject"] = subject
-    message["From"] = formataddr((from_name or "", from_email))
-    message["To"] = ", ".join(contacts)
-    message.set_content(body)
-
-    if use_tls and port == 465:
-        smtp = smtplib.SMTP_SSL(host, port, timeout=10)
-    else:
-        smtp = smtplib.SMTP(host, port, timeout=10)
-        if use_tls:
-            smtp.starttls()
-    if username and password:
-        smtp.login(username, password)
-    smtp.send_message(message)
-    smtp.quit()
-
-
-def _send_wecom(channel: AlertChannel, subject: str, body: str, contacts: Sequence[str]) -> None:
-    config = channel.config or {}
-    webhook = config.get("webhook_url")
-    if not webhook:
-        raise ValueError("企业微信 webhook 未配置")
-    payload = {
-        "msgtype": "text",
-        "text": {
-            "content": f"{subject}\n{body}",
-            "mentioned_mobile_list": list(contacts) or config.get("mentions") or [],
-        },
-    }
-    requests.post(webhook, json=payload, timeout=5)
-
-
-def _send_dingtalk(channel: AlertChannel, subject: str, body: str, contacts: Sequence[str]) -> None:
-    config = channel.config or {}
-    webhook = config.get("webhook_url")
-    if not webhook:
-        raise ValueError("钉钉 webhook 未配置")
-    payload = {
-        "msgtype": "text",
-        "text": {"content": f"{subject}\n{body}"},
-        "at": {
-            "atMobiles": list(contacts) or config.get("at_mobiles") or [],
-            "isAtAll": False,
-        },
-    }
-    requests.post(webhook, json=payload, timeout=5)
-
-
-def _send_lark(channel: AlertChannel, subject: str, body: str) -> None:
-    config = channel.config or {}
-    webhook = config.get("webhook_url")
-    if not webhook:
-        raise ValueError("飞书 webhook 未配置")
-    payload = {
-        "msg_type": "text",
-        "content": {"text": f"{subject}\n{body}"},
-    }
-    requests.post(webhook, json=payload, timeout=5)
-
-
-def _send_http_callback(
-    channel: AlertChannel,
-    subject: str,
-    body: str,
-    context: dict[str, str],
-) -> None:
-    config = channel.config or {}
-    url = config.get("url")
-    method = (config.get("method") or "POST").upper()
-    if not url:
-        raise ValueError("HTTP 回调 URL 未配置")
-    headers = {}
-    if config.get("headers"):
-        try:
-            headers = json.loads(config["headers"])
-        except json.JSONDecodeError:
-            logger.warning("HTTP channel headers 配置不是合法 JSON，已忽略")
-    data = None
-    json_payload = None
-    body_template = config.get("body_template")
-    if body_template:
-        try:
-            rendered = render_alert_template(body_template, context)
-            json_payload = json.loads(rendered)
-        except (AlertTemplateError, json.JSONDecodeError):
-            data = rendered if "rendered" in locals() else body
-    if json_payload is None and data is None:
-        json_payload = {
-            "subject": subject,
-            "message": body,
-            "status": context.get("status"),
-            "severity": context.get("severity"),
-        }
-    requests.request(method, url, headers=headers, json=json_payload, data=data, timeout=5)
+    return None

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -10,6 +11,9 @@ from apps.probes.models import ProbeNode
 
 
 def enqueue_due_jobs(*, now=None) -> tuple[int, int]:
+    # When central scheduler is enabled, AlertSchedule-driven flow owns job execution.
+    if getattr(settings, "ALERTS_CENTRAL_SCHEDULER_ENABLED", False):
+        return 0, 0
     current = now or timezone.now()
     jobs = (
         MonitoringJob.objects.select_related("request")
@@ -128,4 +132,3 @@ def _pick_expect_status(metadata: dict, expected_codes: list[int]) -> int:
     if parsed is not None and 100 <= parsed <= 599:
         return parsed
     return expected_codes[0]
-

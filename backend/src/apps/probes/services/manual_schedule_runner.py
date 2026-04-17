@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -12,6 +13,9 @@ from .probe_task_service import expect_status_from_metadata, timeout_from_metada
 
 
 def run_due_manual_schedules(*, now=None) -> tuple[int, int]:
+    # When central scheduler is enabled, AlertSchedule-driven flow owns manual probe execution.
+    if getattr(settings, "ALERTS_CENTRAL_SCHEDULER_ENABLED", False):
+        return 0, 0
     current = now or timezone.now()
     schedules = (
         ProbeSchedule.objects.prefetch_related("probes")
@@ -105,4 +109,3 @@ def _normalize_positive_int(value, *, default: int) -> int:
     except (TypeError, ValueError):
         return default
     return parsed if parsed > 0 else default
-

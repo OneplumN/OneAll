@@ -9,7 +9,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.probes.models import ProbeSchedule, ProbeScheduleExecution
-from apps.settings.models import SystemSettings
+
+CERTIFICATE_ALERT_THRESHOLD_CRITICAL = 15
+CERTIFICATE_ALERT_THRESHOLD_WARNING = 30
+CERTIFICATE_ALERT_THRESHOLD_NOTICE = 45
 
 
 def _parse_int(value: Any, default: int, *, min_value: int, max_value: int) -> int:
@@ -34,10 +37,6 @@ class DashboardCertificateAlertsView(APIView):
 
     def get(self, request: Request) -> Response:
         limit = _parse_int(request.query_params.get("limit"), 12, min_value=1, max_value=100)
-        settings = SystemSettings.objects.order_by("-updated_at").first()
-        threshold_critical = getattr(settings, "certificate_expiry_threshold_critical_days", 15) if settings else 15
-        threshold_warning = getattr(settings, "certificate_expiry_threshold_warning_days", 30) if settings else 30
-        threshold_notice = getattr(settings, "certificate_expiry_threshold_notice_days", 45) if settings else 45
 
         schedules = list(
             ProbeSchedule.objects.filter(status=ProbeSchedule.Status.ACTIVE, protocol="CERTIFICATE")
@@ -80,11 +79,11 @@ class DashboardCertificateAlertsView(APIView):
                 severity = "warning"
             elif days_remaining < 0:
                 severity = "critical"
-            elif days_remaining <= threshold_critical:
+            elif days_remaining <= CERTIFICATE_ALERT_THRESHOLD_CRITICAL:
                 severity = "critical"
-            elif days_remaining <= threshold_warning:
+            elif days_remaining <= CERTIFICATE_ALERT_THRESHOLD_WARNING:
                 severity = "warning"
-            elif days_remaining <= threshold_notice:
+            elif days_remaining <= CERTIFICATE_ALERT_THRESHOLD_NOTICE:
                 severity = "info"
             else:
                 continue
@@ -113,11 +112,6 @@ class DashboardCertificateAlertsView(APIView):
         return Response(
             {
                 "generated_at": timezone.now().isoformat(),
-                "thresholds": {
-                    "critical": threshold_critical,
-                    "warning": threshold_warning,
-                    "notice": threshold_notice,
-                },
                 "stats": {
                     "schedules_total": total_schedules,
                     "schedules_with_result": with_result,

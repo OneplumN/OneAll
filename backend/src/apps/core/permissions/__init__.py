@@ -16,10 +16,6 @@ PERMISSION_ALIASES: dict[str, str] = {
     "tools.library.execute": "tools.library.manage",
     "tools.repository.commit": "tools.repository.create",
     "tools.repository.rollback": "tools.repository.manage",
-    "integrations.hub.toggle": "integrations.hub.manage",
-    "integrations.hub.configure": "integrations.hub.manage",
-    "knowledge.articles.review": "knowledge.articles.manage",
-    "knowledge.articles.delete": "knowledge.articles.manage",
     "settings.system.update": "settings.system.manage",
     "settings.users.assign_roles": "settings.users.manage",
     "settings.users.sync": "settings.users.manage",
@@ -78,5 +74,19 @@ class HasPermission(BasePermission):
 def RequirePermission(permission: str):
     class _Permission(HasPermission):
         permission_code = permission
+
+    return _Permission
+
+
+def RequireAnyPermission(*permissions: str):
+    class _Permission(BasePermission):
+        permission_codes = tuple(permission for permission in permissions if permission)
+
+        def has_permission(self, request, view):
+            user = getattr(request, "user", None)
+            if not user or not user.is_authenticated or not self.permission_codes:
+                return False
+            user_permissions = get_user_permissions(user)
+            return any(permission in user_permissions for permission in self.permission_codes)
 
     return _Permission

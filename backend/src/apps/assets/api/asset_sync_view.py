@@ -12,10 +12,11 @@ from django.utils import timezone
 from apps.assets.models import AssetSyncRun
 from apps.assets.services.sync_service import sync_assets
 from apps.assets.tasks.asset_sync_task import run_asset_sync
+from apps.core.permissions import RequirePermission
 
 
 class AssetSyncTriggerView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("assets.records.manage")]
 
     def post(self, request: Request) -> Response:
         payload = request.data or {}

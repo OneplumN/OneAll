@@ -25,6 +25,8 @@ def insert_runtime_snapshot(
     probe_id,
     node_name: str,
     uptime_seconds: int,
+    cpu_usage: float | None,
+    memory_usage_mb: float | None,
     heartbeats_sent: int,
     heartbeats_failed: int,
     heartbeats_last_success: Optional[datetime],
@@ -48,6 +50,8 @@ def insert_runtime_snapshot(
             probe_id,
             node_name,
             uptime_seconds,
+            cpu_usage,
+            memory_usage_mb,
             heartbeats_sent,
             heartbeats_failed,
             heartbeats_last_success,
@@ -60,12 +64,14 @@ def insert_runtime_snapshot(
             metrics_generated_at,
             recorded_at
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
     params = (
         str(probe_id),
         node_name,
         uptime_seconds,
+        cpu_usage,
+        memory_usage_mb,
         heartbeats_sent,
         heartbeats_failed,
         heartbeats_last_success,

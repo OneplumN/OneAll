@@ -8,11 +8,57 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.assets.models import AssetRecord
+from apps.assets.services.sync_service import _build_canonical_key
+from apps.settings.services.system_settings_service import get_integration_settings
 from apps.core.permissions import RequirePermission
 from .asset_serializers import AssetRecordSerializer, AssetRecordCreateSerializer, AssetRecordUpdateSerializer
 
 
+def _compute_asset_type_and_canonical_key(payload: dict) -> tuple[str, str]:
+    """根据请求负载计算 asset_type 与 canonical_key，用于导入/新增时做冲突检查。
+
+    - asset_type 优先取 metadata.asset_type，其次可回退到 payload.asset_type
+    - canonical_key 使用与同步流程一致的 _build_canonical_key 逻辑，并考虑系统设置中的唯一键覆盖
+    """
+
+    metadata = dict(payload.get("metadata") or {})
+    asset_type = metadata.get("asset_type") or payload.get("asset_type") or ""
+    asset_type = str(asset_type or "").strip()
+    if not asset_type:
+        return "", ""
+
+    # 读取系统设置中的唯一键覆盖配置
+    asset_settings = get_integration_settings("assets")
+    type_overrides = asset_settings.get("types") or {}
+    override_conf = type_overrides.get(asset_type) if isinstance(type_overrides, dict) else None
+
+    unique_fields_override: list[str] | None = None
+    if isinstance(override_conf, dict):
+        fields = override_conf.get("unique_fields")
+        if isinstance(fields, list):
+            cleaned = [str(f).strip() for f in fields if str(f).strip()]
+            if cleaned:
+                unique_fields_override = cleaned
+
+    canonical_key = _build_canonical_key(asset_type, metadata, payload, unique_fields_override)
+    if not canonical_key:
+        return asset_type, ""
+    return asset_type, canonical_key
+
+
+def _has_canonical_conflict(asset_type: str, canonical_key: str) -> bool:
+    """检查是否已存在相同 asset_type + canonical_key 的资产记录（排除已删除）。"""
+    if not asset_type or not canonical_key:
+        return False
+    return AssetRecord.objects.filter(
+        asset_type=asset_type,
+        canonical_key=canonical_key,
+        is_removed=False,
+    ).exists()
+
+
 class AssetRecordListView(APIView):
+    # 暂时仅要求登录，细粒度权限控制留待后续统一收口
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request: Request) -> Response:
@@ -27,12 +73,39 @@ class AssetRecordListView(APIView):
     def post(self, request: Request) -> Response:
         serializer = AssetRecordCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
+        payload = dict(serializer.validated_data)
+        asset_type, canonical_key = _compute_asset_type_and_canonical_key(payload)
+        if asset_type and canonical_key and _has_canonical_conflict(asset_type, canonical_key):
+            return Response(
+                {
+                    "detail": "创建失败：该资产已存在（业务唯一键相同），请勿重复创建。如需修改信息，请在列表中搜索并编辑已有资产。",
+                    "asset_type": asset_type,
+                    "canonical_key": canonical_key,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         record = serializer.save()
+        # 为手工创建的资产补写 asset_type / canonical_key，便于后续统一冲突检测
+        if asset_type and canonical_key:
+            update_fields = []
+            if record.asset_type != asset_type:
+                record.asset_type = asset_type
+                update_fields.append("asset_type")
+            if record.canonical_key != canonical_key:
+                record.canonical_key = canonical_key
+                update_fields.append("canonical_key")
+            if update_fields:
+                update_fields.append("updated_at")
+                record.save(update_fields=update_fields)
+
         read_serializer = AssetRecordSerializer(record)
         return Response(read_serializer.data, status=status.HTTP_201_CREATED)
 
 
 class AssetRecordImportView(APIView):
+    # 暂时仅要求登录，细粒度权限控制留待后续统一收口
     permission_classes = [permissions.IsAuthenticated]
     MAX_RECORDS = 500
 
@@ -54,6 +127,7 @@ class AssetRecordImportView(APIView):
         validated_rows: list[dict] = []
         row_meta: list[tuple[int, str, str]] = []
         seen_keys: set[tuple[str, str]] = set()
+        seen_canonical: set[tuple[str, str]] = set()
 
         for index, payload in enumerate(records):
             serializer = AssetRecordCreateSerializer(data=payload)
@@ -61,7 +135,7 @@ class AssetRecordImportView(APIView):
                 errors.append({'index': index, 'errors': serializer.errors})
                 continue
 
-            data = serializer.validated_data
+            data = dict(serializer.validated_data)
             source = str(data.get("source") or "")
             external_id = str(data.get("external_id") or "")
             key = (source, external_id)
@@ -77,6 +151,35 @@ class AssetRecordImportView(APIView):
                 continue
             seen_keys.add(key)
 
+            # 业务唯一键冲突检查：同一 asset_type + canonical_key 不允许重复导入
+            asset_type, canonical_key = _compute_asset_type_and_canonical_key(data)
+            if asset_type and canonical_key:
+                canonical_key_tuple = (asset_type, canonical_key)
+                if canonical_key_tuple in seen_canonical:
+                    errors.append(
+                        {
+                            'index': index,
+                            'errors': {
+                                'canonical_key': ['存在同类型资产（与本次导入中的其他记录业务唯一键相同），请检查是否重复'],
+                            },
+                        }
+                    )
+                    continue
+                if _has_canonical_conflict(asset_type, canonical_key):
+                    errors.append(
+                        {
+                            'index': index,
+                            'errors': {
+                                'canonical_key': ['存在同类型资产（与已有资产业务唯一键相同），请检查是否重复'],
+                            },
+                        }
+                    )
+                    continue
+                seen_canonical.add(canonical_key_tuple)
+                # 将资产类型与业务主键写入数据，便于后续创建记录
+                data["asset_type"] = asset_type
+                data["canonical_key"] = canonical_key
+
             if not data.get("sync_status"):
                 data["sync_status"] = "manual"
 
@@ -84,12 +187,20 @@ class AssetRecordImportView(APIView):
             row_meta.append((index, source, external_id))
 
         if not validated_rows:
+            error_keys = {
+                key
+                for item in errors
+                for key in ((item.get("errors") or {}).keys() if isinstance(item.get("errors"), dict) else [])
+            }
+            conflict_only = bool(error_keys) and error_keys.issubset({"canonical_key", "external_id"})
             return Response(
                 {
                     'detail': '所有记录校验失败',
+                    'created': 0,
+                    'failed': len(errors),
                     'errors': errors,
                 },
-                status=status.HTTP_400_BAD_REQUEST,
+                status=status.HTTP_200_OK if conflict_only else status.HTTP_400_BAD_REQUEST,
             )
 
         existing_keys: set[tuple[str, str]] = set()

@@ -98,7 +98,10 @@ func (m *Manager) Apply(update *gateway.ConfigUpdate) {
 }
 
 func (m *Manager) tick() {
-	now := time.Now().UTC()
+	m.tickAt(time.Now().UTC())
+}
+
+func (m *Manager) tickAt(now time.Time) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, ent := range m.configs {
@@ -111,6 +114,13 @@ func (m *Manager) tick() {
 		for !ent.nextRun.After(now) {
 			scheduled := ent.nextRun
 			ent.nextRun = ent.nextRun.Add(ent.cfg.Interval)
+			m.logger.Info().
+				Str("schedule", ent.cfg.ID).
+				Str("protocol", ent.cfg.Protocol).
+				Str("target", ent.cfg.Target).
+				Time("scheduled_at", scheduled).
+				Time("next_run", ent.nextRun).
+				Msg("schedule due; queueing execution")
 			m.enqueue(ent.cfg, scheduled, now)
 		}
 	}
@@ -183,6 +193,13 @@ func (m *Manager) dispatchTask(task api.Task) {
 	}
 	select {
 	case m.taskQueue <- task:
+		m.logger.Info().
+			Str("task_id", task.ID).
+			Str("schedule", task.ScheduleID).
+			Str("protocol", task.Protocol).
+			Str("target", task.Target).
+			Time("scheduled_at", task.ScheduledAt).
+			Msg("scheduler dispatched task")
 	default:
 		m.logger.Warn().
 			Str("schedule", task.ScheduleID).
@@ -257,6 +274,15 @@ func (m *Manager) insertConfigLocked(cfg Config, now time.Time) {
 		cfg:     cfg,
 		nextRun: nextRun,
 	}
+	m.logger.Info().
+		Str("schedule", cfg.ID).
+		Str("protocol", cfg.Protocol).
+		Str("target", cfg.Target).
+		Bool("paused", cfg.Paused).
+		Time("start_at", cfg.StartAt).
+		Time("next_run", nextRun).
+		Dur("interval", cfg.Interval).
+		Msg("scheduler loaded config")
 }
 
 func cloneConfig(cfg Config) Config {

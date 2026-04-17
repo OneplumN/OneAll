@@ -1,0 +1,136 @@
+<template>
+  <RepositoryPageShell
+    root-title="运维工具"
+    section-title="账号同步"
+    scroll-mode="page"
+  >
+    <template #actions>
+      <div
+        class="refresh-card"
+        @click="fetchPlugin"
+      >
+        <el-icon
+          class="refresh-icon"
+          :class="{ spinning: loading }"
+        >
+          <Refresh />
+        </el-icon>
+        <span>刷新</span>
+      </div>
+      <el-button
+        class="toolbar-button toolbar-button--primary"
+        type="primary"
+        :loading="saving"
+        :disabled="!canSave"
+        @click="handleSave"
+      >
+        保存配置
+      </el-button>
+      <el-button
+        class="toolbar-button"
+        type="success"
+        :loading="running"
+        :disabled="!canRun"
+        @click="handleRun"
+      >
+        立即同步
+      </el-button>
+    </template>
+
+    <div class="layout-grid">
+      <AccountSyncConfigCard
+        v-model:panels="activePanels"
+        v-model:form-values="formValues"
+        :expanded="configExpanded"
+        :is-ldap-ready="isLdapReady"
+        :is-zabbix-ready="isZabbixReady"
+        :ldap-password-placeholder="ldapPasswordPlaceholder"
+        :zabbix-token-placeholder="zabbixTokenPlaceholder"
+        @toggle-expand="configExpanded = !configExpanded"
+      />
+
+      <ToolExecutionPanel
+        v-model:scrollbar-ref="logScrollbarRef"
+        :current-execution="currentExecution"
+        :current-run-id="currentRunId"
+        :executions-loading="executionsLoading"
+        :status-tag-type="statusTagType"
+        :status-text="statusText"
+        :format-time="formatTime"
+        :is-running-status="isRunningStatus"
+        :log-auto-follow="logAutoFollow"
+        :log-wrap="logWrap"
+        :visible-log-output="visibleLogOutput"
+        @refresh="fetchExecutions"
+        @copy-run-id="copyText"
+        @toggle-follow="toggleFollow"
+        @toggle-wrap="toggleWrap"
+        @copy-log="copyText"
+        @download-log="downloadLog"
+        @clear-log="clearLogView"
+        @scroll="handleLogScroll"
+      />
+    </div>
+  </RepositoryPageShell>
+</template>
+
+<script setup lang="ts">
+import { Refresh } from '@element-plus/icons-vue';
+import AccountSyncConfigCard from '@/features/tools/components/AccountSyncConfigCard.vue';
+import ToolExecutionPanel from '@/features/tools/components/ToolExecutionPanel.vue';
+import { useAccountSyncPage } from '@/features/tools/composables/useAccountSyncPage';
+import RepositoryPageShell from '@/shared/components/layout/RepositoryPageShell';
+
+const {
+  activePanels,
+  canRun,
+  canSave,
+  clearLogView,
+  configExpanded,
+  copyText,
+  currentExecution,
+  currentRunId,
+  downloadLog,
+  executionsLoading,
+  fetchExecutions,
+  fetchPlugin,
+  formValues,
+  formatTime,
+  handleLogScroll,
+  handleRun,
+  handleSave,
+  isRunningStatus,
+  isLdapReady,
+  isZabbixReady,
+  ldapPasswordPlaceholder,
+  loading,
+  logAutoFollow,
+  logScrollbarRef,
+  logWrap,
+  running,
+  saving,
+  statusTagType,
+  statusText,
+  toggleFollow,
+  toggleWrap,
+  visibleLogOutput,
+  zabbixTokenPlaceholder,
+} = useAccountSyncPage();
+</script>
+
+<style scoped>
+.layout-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .layout-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

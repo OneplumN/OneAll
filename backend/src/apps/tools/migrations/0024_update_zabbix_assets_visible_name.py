@@ -187,7 +187,7 @@ def update_script(apps, schema_editor):
 
     version = CodeRepositoryVersion.objects.create(
         repository=repo,
-        version=timezone.now().strftime("zabbix-sync-%Y%m%d%H%M"),
+        version=timezone.now().strftime("zabbix-sync-%Y%m%d%H%M%S%f"),
         summary="补齐 Zabbix 主机可见名称字段",
         change_log="同步 host.get 时补充输出 name（可见名称），并写入 metadata.visible_name 供资产中心展示。",
         content=SCRIPT_BODY,
@@ -205,4 +205,3 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RunPython(update_script, migrations.RunPython.noop),
     ]
-

@@ -1,0 +1,424 @@
+// 一次性检验（拨测）通用样式：与共享 RepositoryPageShell / page-toolbar 系统对齐
+
+.detection-layout {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.config-toolbar {
+  border-bottom: 1px solid var(--oa-border-light);
+}
+
+.config-toolbar .page-toolbar__left,
+.config-toolbar .page-toolbar__right {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.config-toolbar .narrow-select {
+  width: 140px;
+}
+
+.detection-content {
+  min-height: 0;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--oa-bg-panel);
+}
+
+// 输入框样式
+.detection-input {
+  min-width: 320px;
+  flex: 1;
+
+  :deep(.el-input__wrapper) {
+    border-radius: 999px;
+    padding-left: 0.85rem;
+    background: var(--oa-filter-control-bg);
+    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.2);
+    transition: all 0.2s ease;
+
+    &:hover {
+      box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.4);
+    }
+
+    &.is-focus {
+      box-shadow: inset 0 0 0 2px var(--el-color-primary);
+    }
+  }
+
+  // 输入框图标样式
+  :deep(.el-input__prefix) {
+    color: var(--oa-text-secondary);
+  }
+
+  :deep(.el-input__suffix) {
+    color: var(--oa-text-secondary);
+  }
+}
+
+// 为“输入域名”提供更舒适的默认宽度（桌面端更宽，移动端自动换行）
+.detection-input--wide {
+  flex: 1;
+  min-width: 520px;
+}
+
+@media (max-width: 768px) {
+  .detection-input--wide {
+    min-width: auto;
+    width: 100%;
+  }
+}
+
+// 按钮组样式（保持 Element Plus 默认风格）
+.detection-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+// 协议选择器（如果用到）
+.protocol-selector {
+  :deep(.el-radio-button__inner) {
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-weight: 500;
+  }
+}
+
+// 内容网格
+.detection-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.8fr);
+  gap: 12px;
+  align-items: start;
+
+  @media (max-width: 1200px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+// 卡片样式（对齐平台：轻边框，无额外 hover 动效）
+.detection-card {
+  border: 1px solid var(--oa-border-light);
+  border-radius: 10px;
+  background: var(--oa-bg-panel);
+
+  :deep(.el-card__body) {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--oa-text-primary);
+  margin-bottom: 4px;
+
+  .el-icon {
+    color: var(--el-color-primary);
+    font-size: 16px;
+  }
+}
+
+// 配置项样式
+.config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.config-item {
+  border: 1px solid var(--oa-border-light);
+  border-radius: 10px;
+  background: var(--oa-bg-muted);
+  padding: 12px;
+
+  &--row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  &--column {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+.config-item__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--oa-text-primary);
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.config-item__label {
+  font-weight: 500;
+  color: var(--oa-text-primary);
+}
+
+.config-item__value {
+  font-weight: 600;
+  color: var(--el-color-primary);
+}
+
+// 滑块控制器
+.slider-control {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+
+  :deep(.el-slider) {
+    flex: 1;
+  }
+
+  .el-input-number {
+    width: 100px;
+  }
+}
+
+// 结果表格区域
+.results-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.results-card {
+  @extend .detection-card;
+  display: flex;
+  flex-direction: column;
+
+  :deep(.el-card__body) {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+  }
+}
+
+.results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--oa-border-light);
+  background: var(--oa-bg-panel);
+}
+
+.results-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--oa-text-primary);
+
+  .el-icon {
+    color: var(--el-color-primary);
+  }
+}
+
+// 表格样式
+.detection-table {
+  min-height: 0;
+
+  :deep(.el-table__header-wrapper) {
+    background: var(--oa-bg-muted);
+  }
+
+  :deep(.el-table th) {
+    background: var(--oa-bg-muted) !important;
+    color: var(--oa-text-secondary);
+    font-weight: 600;
+    height: 44px;
+    border-bottom: 1px solid var(--oa-border-light);
+  }
+
+  :deep(.el-table td) {
+    height: 44px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--oa-border-light);
+  }
+
+  :deep(.el-table__row) {
+    &:hover {
+      background: var(--oa-bg-hover) !important;
+    }
+  }
+}
+
+// 详情抽屉
+.detail-drawer {
+  :deep(.el-drawer__header) {
+    padding: 20px;
+    border-bottom: 1px solid var(--oa-border-light);
+    margin-bottom: 0;
+  }
+
+  :deep(.el-drawer__body) {
+    padding: 20px;
+  }
+}
+
+.detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.detail-section {
+  h4 {
+    margin: 0 0 12px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--oa-text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    &::before {
+      content: '';
+      width: 4px;
+      height: 16px;
+      background: var(--el-color-primary);
+      border-radius: 2px;
+    }
+  }
+}
+
+// 响应式设计
+@media (max-width: 768px) {
+  .detection-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+
+    .header-left,
+    .header-right {
+      justify-content: center;
+    }
+  }
+
+  .detection-input {
+    min-width: auto;
+  }
+
+  .detection-actions {
+    justify-content: center;
+  }
+
+  .detection-content {
+    padding: 16px;
+  }
+}
+
+// 动画效果
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes bounce {
+  0%,
+  20%,
+  53%,
+  80%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  40%,
+  43% {
+    transform: translate3d(0, -8px, 0);
+  }
+  70% {
+    transform: translate3d(0, -4px, 0);
+  }
+  90% {
+    transform: translate3d(0, -2px, 0);
+  }
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+.slide-in-right {
+  animation: slideInRight 0.3s ease-out;
+}
+
+.bounce-in {
+  animation: bounce 0.6s ease-out;
+}
+
+// 加载状态
+.loading-overlay {
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(2px);
+    z-index: 10;
+  }
+}
+
+// 空状态
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: var(--oa-text-secondary);
+
+  .el-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+  }
+
+  .empty-text {
+    font-size: 16px;
+    margin-bottom: 8px;
+  }
+
+  .empty-hint {
+    font-size: 14px;
+    opacity: 0.7;
+  }
+}

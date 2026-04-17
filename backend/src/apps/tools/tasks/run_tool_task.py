@@ -161,6 +161,10 @@ def run_tool_task(run_id: str) -> dict[str, str]:
             f"fetched={asset_ingest.get('fetched')} created={asset_ingest.get('created')} "
             f"updated={asset_ingest.get('updated')} removed={asset_ingest.get('removed')}"
         ).strip()
+    if success and script_result is not None:
+        rendered_result = script_result if isinstance(script_result, str) else str(script_result)
+        if rendered_result.strip():
+            output_text = f"{output_text}\n{rendered_result}".strip() if output_text else rendered_result
     if not output_text and success:
         output_text = f"[{timezone.now().isoformat()}] {execution.tool.name} executed."
 

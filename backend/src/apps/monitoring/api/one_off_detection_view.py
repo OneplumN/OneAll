@@ -45,6 +45,8 @@ class OneOffDetectionView(APIView):
                 },
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         response_serializer = DetectionTaskSerializer(detection)
         return Response(response_serializer.data, status=status.HTTP_202_ACCEPTED)

@@ -549,61 +549,7 @@ def main(argv: list[str]) -> int:
             )
         )
 
-    # 7) Analytics
-    results.append(
-        request_json(
-            name="拨测统计报表",
-            method="GET",
-            url=f"{api_base}/analytics/reports/detection",
-            headers=auth_headers,
-            params={"days": 7},
-            expected=(200,),
-        )
-    )
-    results.append(
-        request_json(
-            name="资产治理概览",
-            method="GET",
-            url=f"{api_base}/analytics/assets/overview",
-            headers=auth_headers,
-            params={"limit": 20},
-            expected=(200,),
-        )
-    )
-    # proxy-hosts 需要 proxy 参数；优先从 facets 中取一个 proxy 值
-    proxy_value = None
-    try:
-        payload = assets_query.json() if assets_query.status_code == 200 else {}
-        facets = (payload or {}).get("facets") or {}
-        proxy_list = facets.get("proxy") or []
-        if proxy_list:
-            proxy_value = proxy_list[0]
-    except Exception:
-        proxy_value = None
-    if proxy_value:
-        results.append(
-            request_json(
-                name="按 Proxy 查询主机明细",
-                method="GET",
-                url=f"{api_base}/analytics/assets/proxy-hosts",
-                headers=auth_headers,
-                params={"proxy": proxy_value, "limit": 10, "offset": 0},
-                expected=(200,),
-            )
-        )
-    else:
-        results.append(
-            CheckResult(
-                name="按 Proxy 查询主机明细",
-                method="GET",
-                url=f"{api_base}/analytics/assets/proxy-hosts",
-                ok=True,
-                status_code=None,
-                detail="跳过：当前资产 facets 未返回 proxy 列表",
-            )
-        )
-
-    # 8) Tools / Knowledge（只做读取，避免污染）
+    # 7) Tools（只做读取，避免污染）
     results.append(
         request_json(
             name="工具定义列表",
@@ -647,46 +593,6 @@ def main(argv: list[str]) -> int:
             url=f"{api_base}/tools/script-plugins",
             headers=auth_headers,
             expected=(200,),
-        )
-    )
-    results.append(
-        request_json(
-            name="知识库文章列表",
-            method="GET",
-            url=f"{api_base}/knowledge/articles",
-            headers=auth_headers,
-            expected=(200,),
-        )
-    )
-    results.append(
-        request_json(
-            name="知识库目录列表",
-            method="GET",
-            url=f"{api_base}/knowledge/categories",
-            headers=auth_headers,
-            expected=(200,),
-        )
-    )
-
-    # 9) Zabbix integration（环境可能未配置，允许 503）
-    results.append(
-        request_json(
-            name="Zabbix 驾驶舱快照",
-            method="GET",
-            url=f"{api_base}/integrations/zabbix/dashboard",
-            headers=auth_headers,
-            expected=(200, 503),
-            timeout=30,
-        )
-    )
-    results.append(
-        request_json(
-            name="Zabbix 连通性测试",
-            method="POST",
-            url=f"{api_base}/integrations/zabbix/test",
-            headers=auth_headers,
-            expected=(200, 503),
-            timeout=30,
         )
     )
 

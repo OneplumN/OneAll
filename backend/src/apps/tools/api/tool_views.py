@@ -14,7 +14,6 @@ from apps.tools.api.serializers import (
     ToolExecutionSerializer,
 )
 from apps.tools.models import ScriptPlugin, ToolDefinition, ToolExecution
-from apps.tools.services.tool_result_sync import ToolResultSyncService
 from apps.tools.services.repository_audit import RepositoryAuditService
 from apps.tools.services.tool_runner import ToolRunnerService
 
@@ -65,14 +64,6 @@ class ToolExecuteView(APIView):
             parameters=serializer.validated_data.get("parameters"),
             script_version=script_version,
         )
-
-        knowledge_slug = serializer.validated_data.get("knowledge_slug")
-        if knowledge_slug:
-            ToolResultSyncService(actor=request.user).sync_execution_result(
-                execution,
-                article_slug=knowledge_slug,
-                summary=serializer.validated_data.get("knowledge_title") or tool.name,
-            )
 
         return Response(ToolExecutionSerializer(execution).data, status=status.HTTP_202_ACCEPTED)
 

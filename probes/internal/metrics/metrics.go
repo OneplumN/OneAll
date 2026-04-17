@@ -17,6 +17,8 @@ type Recorder struct {
 	heartbeatsSent   atomic.Int64
 	heartbeatsFailed atomic.Int64
 	lastHeartbeatSuccess atomic.Value
+	cpuUsage    atomic.Int64
+	memoryUsage atomic.Int64
 	tasksFetched atomic.Int64
 	tasksExecuted atomic.Int64
 	tasksFailed   atomic.Int64
@@ -34,6 +36,8 @@ type Snapshot struct {
 		Failed      int64     `json:"failed"`
 		LastSuccess *time.Time `json:"last_success,omitempty"`
 	} `json:"heartbeats"`
+	CPUUsagePercent float64 `json:"cpu_usage_percent"`
+	MemoryUsageMB   float64 `json:"memory_usage_mb"`
 	Tasks struct {
 		Fetched  int64 `json:"fetched"`
 		Executed int64 `json:"executed"`
@@ -92,6 +96,12 @@ func (r *Recorder) WorkersDelta(delta int) {
 	r.activeWorkers.Add(int64(delta))
 }
 
+// SetHostUsage updates last known host CPU and memory usage.
+func (r *Recorder) SetHostUsage(cpuPercent float64, memoryMB float64) {
+	r.cpuUsage.Store(int64(cpuPercent * 100))
+	r.memoryUsage.Store(int64(memoryMB * 100))
+}
+
 // Snapshot returns the current metrics snapshot.
 func (r *Recorder) Snapshot() Snapshot {
 	s := Snapshot{
@@ -111,6 +121,8 @@ func (r *Recorder) Snapshot() Snapshot {
 	s.Queue.Depth = r.queueDepth.Load()
 	s.Queue.Capacity = r.queueCapacity.Load()
 	s.Workers.Active = r.activeWorkers.Load()
+	s.CPUUsagePercent = float64(r.cpuUsage.Load()) / 100.0
+	s.MemoryUsageMB = float64(r.memoryUsage.Load()) / 100.0
 	return s
 }
 

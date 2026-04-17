@@ -6,7 +6,7 @@ from typing import Callable, Tuple
 
 from celery import shared_task
 
-from apps.monitoring.integrations import prometheus_adapter, zabbix_adapter
+from apps.monitoring.integrations import prometheus_adapter
 from apps.monitoring.repositories.monitoring_source_metrics import (
     record_monitoring_source_snapshot,
 )
@@ -19,7 +19,6 @@ Fetcher = Callable[[], dict]
 
 def _registered_sources() -> Tuple[Tuple[str, Fetcher], ...]:
     return (
-        ("zabbix", zabbix_adapter.fetch_status),
         ("prometheus", lambda: prometheus_adapter.fetch_metrics("up")),
     )
 

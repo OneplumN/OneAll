@@ -18,6 +18,10 @@ class AssetRecord(BaseModel):
         MANUAL = "Manual", "Manual"
 
     source = models.CharField(max_length=32, choices=Source.choices)
+    # 广义资产类型，例如 domain / zabbix-host / ipmp-project / workorder-host 等
+    asset_type = models.CharField(max_length=64, blank=True)
+    # 业务唯一键的规范化表示，用于跨源/多次同步时避免重复
+    canonical_key = models.CharField(max_length=256, blank=True)
     external_id = models.CharField(max_length=128)
     name = models.CharField(max_length=256)
     system_name = models.CharField(max_length=128, blank=True)
@@ -36,6 +40,21 @@ class AssetRecord(BaseModel):
         verbose_name = "Asset Record"
         verbose_name_plural = "Asset Records"
         unique_together = ("source", "external_id")
+
+    @property
+    def resolved_asset_type(self) -> str:
+        """Return a normalized asset_type for consumers.
+
+        优先使用显式的 asset_type 字段；兼容旧数据时会回退到 metadata.asset_type，
+        再退回到 source 名称，保证调用方总能拿到一个可用的资产类型 key。
+        """
+
+        if self.asset_type:
+            return self.asset_type
+        metadata_type = (self.metadata or {}).get("asset_type") or ""
+        if metadata_type:
+            return str(metadata_type)
+        return str(self.source)
 
     def mark_synced(self, status: str, metadata: dict | None = None) -> None:
         self.sync_status = status

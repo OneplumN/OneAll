@@ -7,7 +7,6 @@ TASK_QUEUE_NAMES = (
     "celery",
     "monitoring",
     "probes",
-    "analytics",
     "settings",
     "assets",
 )
@@ -15,7 +14,6 @@ TASK_QUEUE_NAMES = (
 CELERY_TASK_ROUTES = {
     "apps.monitoring.tasks.*": {"queue": "monitoring"},
     "apps.probes.tasks.*": {"queue": "probes"},
-    "apps.analytics.tasks.*": {"queue": "analytics"},
     "apps.settings.tasks.*": {"queue": "settings"},
     "apps.assets.tasks.*": {"queue": "assets"},
 }
@@ -25,11 +23,6 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.dashboard.tasks.overview_refresh.refresh_metrics",
         "schedule": crontab(minute="*/5"),
     },
-    "zabbix-dashboard-refresh": {
-        "task": "apps.monitoring.tasks.zabbix_dashboard_refresh.refresh_snapshot",
-        "schedule": 30.0,
-        "options": {"queue": "monitoring"},
-    },
     "plugin-health-check": {
         "task": "apps.settings.tasks.plugin_health_check",
         "schedule": crontab(minute="0", hour="*/1"),
@@ -38,13 +31,15 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.assets.tasks.sync_assets",
         "schedule": crontab(minute="0", hour="2"),
     },
+    "alerts-run-due-schedules": {
+        "task": "apps.alerts.tasks.run_due_alert_schedules",
+        "schedule": crontab(minute="*/1"),
+    },
 }
 
 CELERY_IMPORTS = (
     "apps.monitoring.tasks.execute_detection",
-    "apps.monitoring.tasks.zabbix_dashboard_refresh",
     "apps.probes.tasks.health_checks",
-    "apps.analytics.tasks.report_export_task",
     "apps.settings.tasks.plugin_health_check",
     "apps.assets.tasks.asset_sync_task",
 )

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -13,6 +14,9 @@ type Config struct {
 	APIBaseURL           string `yaml:"api_base_url"`
 	NodeID               string `yaml:"node_id"`
 	APIToken             string `yaml:"api_token"`
+	BootstrapToken       string `yaml:"bootstrap_token"`
+	Location             string `yaml:"location"`
+	NetworkType          string `yaml:"network_type"`
 	GRPCGateway          string `yaml:"grpc_gateway"`
 	GRPCInsecure         bool   `yaml:"grpc_insecure"`
 	GRPCCAFile           string `yaml:"grpc_ca_file"`
@@ -84,16 +88,92 @@ func Load(path string) (Config, error) {
 	if cfg.APIBaseURL == "" {
 		return Config{}, fmt.Errorf("api_base_url is required")
 	}
-	if cfg.NodeID == "" {
-		return Config{}, fmt.Errorf("node_id is required")
-	}
-	if cfg.APIToken == "" {
-		return Config{}, fmt.Errorf("api_token is required")
-	}
+	// 在开发和大多数生产场景下，node_id / api_token / bootstrap_token 都可以留空，
+	// 由探针在启动时通过自动注册获取凭据。是否需要引导 token 由服务端配置控制。
 	return cfg, nil
 }
 
 // UseGRPC reports whether the probe should attempt to connect via gRPC gateway.
 func (c Config) UseGRPC() bool {
 	return c.GRPCGateway != ""
+}
+
+// StatePath derives a reasonable default path for storing dynamic probe state.
+func StatePath(cfg Config, configPath string) string {
+	// Prefer colocating with result cache if configured.
+	if cfg.ResultCachePath != "" {
+		dir := filepath.Dir(cfg.ResultCachePath)
+		return filepath.Join(dir, "probe-state.yaml")
+	}
+	// Fall back to a per-user config directory.
+	if dir, err := os.UserConfigDir(); err == nil && dir != "" {
+		return filepath.Join(dir, "oneall", "probe-state.yaml")
+	}
+	// Last resort: alongside the provided config file or current directory.
+	if configPath != "" {
+		if abs, err := filepath.Abs(configPath); err == nil {
+			return filepath.Join(filepath.Dir(abs), "probe-state.yaml")
+		}
+	}
+	return "probe-state.yaml"
+}
+
+type state struct {
+	NodeID        string    `yaml:"node_id"`
+	APIToken      string    `yaml:"api_token"`
+	RegisteredAt  time.Time `yaml:"registered_at,omitempty"`
+	LastHeartbeat time.Time `yaml:"last_heartbeat_at,omitempty"`
+}
+
+// LoadState applies persisted node credentials from the given path into cfg.
+// Missing state file is not considered an error.
+func LoadState(path string, cfg *Config) error {
+	if path == "" || cfg == nil {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read state: %w", err)
+	}
+	var st state
+	if err := yaml.Unmarshal(data, &st); err != nil {
+		return fmt.Errorf("parse state: %w", err)
+	}
+	if cfg.NodeID == "" && st.NodeID != "" {
+		cfg.NodeID = st.NodeID
+	}
+	if cfg.APIToken == "" && st.APIToken != "" {
+		cfg.APIToken = st.APIToken
+	}
+	return nil
+}
+
+// PersistState writes the node credentials from cfg to the given path.
+func PersistState(path string, cfg Config) error {
+	if path == "" {
+		return nil
+	}
+	if cfg.NodeID == "" || cfg.APIToken == "" {
+		// Nothing to persist.
+		return nil
+	}
+	st := state{
+		NodeID:       cfg.NodeID,
+		APIToken:     cfg.APIToken,
+		RegisteredAt: time.Now().UTC(),
+	}
+	data, err := yaml.Marshal(&st)
+	if err != nil {
+		return fmt.Errorf("marshal state: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("ensure state dir: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return fmt.Errorf("write state: %w", err)
+	}
+	return nil
 }

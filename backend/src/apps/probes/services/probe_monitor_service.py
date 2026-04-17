@@ -39,9 +39,22 @@ def _normalize_metrics(raw: object) -> dict[str, Any] | None:
     if cpu is not None:
         normalized["cpu_usage"] = max(0.0, min(cpu, 100.0))
 
-    memory = _coerce_float(raw.get("memory_usage_mb"))
-    if memory is not None:
-        normalized["memory_usage_mb"] = max(memory, 0.0)
+    # 兼容历史：早期只有 memory_usage_mb（绝对 MB），现在探针优先通过同一个字段上传“内存使用率（百分比）”。
+    # 处理策略：
+    #   1. 如果显式提供 memory_usage_pct，则直接使用；
+    #   2. 否则回退到 memory_usage_mb，把它当作百分比（0-100）来处理；
+    #   3. 如有需要，后续可以再引入真正的“MB 容量”指标。
+    raw_memory_mb = raw.get("memory_usage_mb")
+    if (memory_mb := _coerce_float(raw_memory_mb)) is not None:
+        normalized["memory_usage_mb"] = max(memory_mb, 0.0)
+
+    raw_memory_pct = raw.get("memory_usage_pct")
+    if raw_memory_pct is None:
+        # 新版本探针把“内存使用率”塞在 memory_usage_mb 里，这里做一次回退兼容。
+        raw_memory_pct = raw_memory_mb
+    memory_pct = _coerce_float(raw_memory_pct)
+    if memory_pct is not None:
+        normalized["memory_usage_pct"] = max(0.0, min(memory_pct, 100.0))
 
     load_avg = _coerce_float(raw.get("load_avg"))
     if load_avg is not None:

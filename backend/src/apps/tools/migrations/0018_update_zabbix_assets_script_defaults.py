@@ -140,7 +140,7 @@ def update_script(apps, schema_editor):
         return
     version = CodeRepositoryVersion.objects.create(
         repository=repo,
-        version=timezone.now().strftime("zabbix-sync-%Y%m%d%H%M"),
+        version=timezone.now().strftime("zabbix-sync-%Y%m%d%H%M%S%f"),
         summary="脚本内置 Zabbix 默认 URL/Token",
         change_log="在脚本中添加默认 Zabbix URL 与 Token，避免手动配置。",
         content=SCRIPT_BODY,

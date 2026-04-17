@@ -2,6 +2,7 @@ package system
 
 import (
 	"net"
+	"os"
 	"runtime"
 
 	"github.com/shirou/gopsutil/v3/cpu"
@@ -11,10 +12,12 @@ import (
 
 // Snapshot captures lightweight host metrics for heartbeats.
 type Snapshot struct {
-	CPUPercent float64
-	MemoryMB   float64
-	Load1      float64
-	IP         string
+	CPUPercent    float64
+	MemoryMB      float64
+	MemoryPercent float64
+	Load1         float64
+	IP            string
+	Hostname      string
 }
 
 // Collect returns the current host metrics snapshot.
@@ -25,6 +28,8 @@ func Collect() Snapshot {
 	}
 	if vm, err := mem.VirtualMemory(); err == nil {
 		snap.MemoryMB = float64(vm.Used) / (1024 * 1024)
+		// gopsutil 已经提供 UsedPercent，直接作为“内存使用率”上报给后端。
+		snap.MemoryPercent = vm.UsedPercent
 	}
 	if avg, err := load.Avg(); err == nil {
 		snap.Load1 = avg.Load1
@@ -36,6 +41,9 @@ func Collect() Snapshot {
 		snap.MemoryMB = float64(m.Alloc) / (1024 * 1024)
 	}
 	snap.IP = firstNonLoopbackIP()
+	if h, err := os.Hostname(); err == nil {
+		snap.Hostname = h
+	}
 	return snap
 }
 

@@ -25,8 +25,9 @@ class AssetConflictResolver:
 
     @transaction.atomic
     def resolve(self) -> dict[str, Any]:
-        summary = {"conflicts": 0, "needs_review": 0}
+        summary: dict[str, Any] = {"conflicts": 0, "canonical_conflicts": 0, "needs_review": 0}
 
+        # 1. 严格的“技术重复”：同一 source + external_id 出现多条记录
         duplicates = (
             AssetRecord.objects.values("source", "external_id")
             .annotate(total=Count("id"))
@@ -53,6 +54,46 @@ class AssetConflictResolver:
                 )
                 summary["conflicts"] += 1
 
+        # 2. 业务维度冲突：相同 asset_type + canonical_key 的多条记录
+        canonical_duplicates = (
+            AssetRecord.objects.exclude(asset_type="")
+            .exclude(canonical_key="")
+            .values("asset_type", "canonical_key")
+            .annotate(total=Count("id"))
+            .filter(total__gt=1)
+        )
+
+        for group in canonical_duplicates:
+            records = list(
+                AssetRecord.objects.filter(
+                    asset_type=group["asset_type"], canonical_key=group["canonical_key"]
+                ).order_by("-synced_at")
+            )
+            if len(records) < 2:
+                continue
+
+            anchor = records[0]
+            conflicts = records[1:]
+            conflict_ids = [str(record.id) for record in conflicts]
+            sources = sorted({str(record.source) for record in records})
+
+            for record in conflicts:
+                self._mark(
+                    record,
+                    "conflict",
+                    {
+                        "type": "canonical_duplicate",
+                        "asset_type": group["asset_type"],
+                        "canonical_key": group["canonical_key"],
+                        "anchor": str(anchor.id),
+                        "duplicates": conflict_ids,
+                        "sources": sources,
+                    },
+                )
+                summary["conflicts"] += 1
+                summary["canonical_conflicts"] += 1
+
+        # 3. 字段缺失：名称为空的记录标记为待人工检查
         incomplete_records = AssetRecord.objects.filter(
             sync_status__in=["unknown", "synced"],
         ).filter(name__exact="")

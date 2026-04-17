@@ -1,6 +1,8 @@
 """Services for monitoring and detection."""
 
 from . import detection_service  # noqa: F401
+from . import detection_claim_service  # noqa: F401
+from . import detection_result_service  # noqa: F401
 from . import monitoring_job_service  # noqa: F401
 from . import monitoring_history_service  # noqa: F401
 from . import job_runner_service  # noqa: F401

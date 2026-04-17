@@ -9,6 +9,7 @@ from . import probe_task_cleanup_service  # noqa: F401
 from . import manual_schedule_runner  # noqa: F401
 from . import schedule_config_service  # noqa: F401
 from . import schedule_execution_service  # noqa: F401
+from . import probe_registration_service  # noqa: F401
 
 __all__ = [
     "probe_alert_service",
@@ -20,4 +21,5 @@ __all__ = [
     "manual_schedule_runner",
     "schedule_config_service",
     "schedule_execution_service",
+    "probe_registration_service",
 ]

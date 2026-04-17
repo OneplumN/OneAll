@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 from django.db import models
+from django.utils import timezone
 
 from apps.core.models.base import BaseModel
 
@@ -39,6 +40,7 @@ class DetectionTask(BaseModel):
     result_payload = models.JSONField(default=dict, blank=True)
     executed_at = models.DateTimeField(null=True, blank=True)
     published_at = models.DateTimeField(null=True, blank=True)
+    claimed_at = models.DateTimeField(null=True, blank=True)
     requested_by = models.UUIDField(null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
 
@@ -48,22 +50,94 @@ class DetectionTask(BaseModel):
         verbose_name = "Detection Task"
         verbose_name_plural = "Detection Tasks"
 
-    def mark_running(self) -> None:
+    def mark_running(self, *, published_at=None, claimed_at=None) -> None:
         self.status = self.Status.RUNNING
-        self.save(update_fields=["status", "updated_at"])
+        if self.published_at is None:
+            self.published_at = published_at or timezone.now()
+        if self.claimed_at is None:
+            self.claimed_at = claimed_at or timezone.now()
+        self.save(update_fields=["status", "published_at", "claimed_at", "updated_at"])
 
-    def mark_failed(self, message: str) -> None:
+    def mark_failed(
+        self,
+        message: str,
+        *,
+        response_time_ms: int | None = None,
+        status_code: str | int | None = None,
+        result_payload: dict | None = None,
+        executed_at=None,
+    ) -> None:
         self.status = self.Status.FAILED
         self.error_message = message
-        self.save(update_fields=["status", "error_message", "updated_at"])
-
-    def mark_timeout(self) -> None:
-        self.status = self.Status.TIMEOUT
-        self.save(update_fields=["status", "updated_at"])
-
-    def mark_succeeded(self, response_time_ms: int | None, result_payload: dict | None = None) -> None:
-        self.status = self.Status.SUCCEEDED
         self.response_time_ms = response_time_ms
+        self.status_code = "" if status_code is None else str(status_code)
         if result_payload is not None:
             self.result_payload = result_payload
-        self.save(update_fields=["status", "response_time_ms", "result_payload", "updated_at"])
+        self.executed_at = executed_at or timezone.now()
+        self.save(
+            update_fields=[
+                "status",
+                "error_message",
+                "response_time_ms",
+                "status_code",
+                "result_payload",
+                "executed_at",
+                "updated_at",
+            ]
+        )
+
+    def mark_timeout(
+        self,
+        *,
+        message: str = "",
+        response_time_ms: int | None = None,
+        status_code: str | int | None = None,
+        result_payload: dict | None = None,
+        executed_at=None,
+    ) -> None:
+        self.status = self.Status.TIMEOUT
+        self.error_message = message
+        self.response_time_ms = response_time_ms
+        self.status_code = "" if status_code is None else str(status_code)
+        if result_payload is not None:
+            self.result_payload = result_payload
+        self.executed_at = executed_at or timezone.now()
+        self.save(
+            update_fields=[
+                "status",
+                "error_message",
+                "response_time_ms",
+                "status_code",
+                "result_payload",
+                "executed_at",
+                "updated_at",
+            ]
+        )
+
+    def mark_succeeded(
+        self,
+        response_time_ms: int | None,
+        result_payload: dict | None = None,
+        *,
+        status_code: str | int | None = None,
+        message: str = "",
+        executed_at=None,
+    ) -> None:
+        self.status = self.Status.SUCCEEDED
+        self.error_message = message
+        self.response_time_ms = response_time_ms
+        self.status_code = "" if status_code is None else str(status_code)
+        if result_payload is not None:
+            self.result_payload = result_payload
+        self.executed_at = executed_at or timezone.now()
+        self.save(
+            update_fields=[
+                "status",
+                "error_message",
+                "response_time_ms",
+                "status_code",
+                "result_payload",
+                "executed_at",
+                "updated_at",
+            ]
+        )

@@ -3,7 +3,7 @@ info:
   title: OneAll Platform API
   version: 0.1.0
   description: |
-    REST API for OneAll 智能运维平台，覆盖探针、拨测、审批、资产、工具库、知识库与集成中心能力。
+    REST API for OneAll 智能运维平台，覆盖探针、拨测、审批、资产、工具库、告警与系统设置能力。
 servers:
   - url: https://api.oneall.internal/v1
     description: Production
@@ -16,10 +16,7 @@ tags:
   - name: Dashboard
   - name: Monitoring
   - name: Assets
-  - name: Analytics
   - name: Tools
-  - name: Knowledge
-  - name: Integrations
   - name: Settings
   - name: Audit
 paths:
@@ -614,86 +611,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/AssetSyncRunDetailResponse'
 
-  /analytics/reports/detection:
-    get:
-      tags: [Analytics]
-      summary: 拨测统计报表
-      parameters:
-        - in: query
-          name: days
-          schema:
-            type: integer
-            default: 30
-            minimum: 1
-            maximum: 365
-      responses:
-        '200':
-          description: 报表数据
-          content:
-            application/json:
-              schema:
-                type: object
-
-  /analytics/assets/overview:
-    get:
-      tags: [Analytics]
-      summary: 资产监控治理统计概览
-      parameters:
-        - in: query
-          name: limit
-          schema:
-            type: integer
-            default: 50
-            minimum: 1
-            maximum: 500
-      responses:
-        '200':
-          description: 治理统计概览
-          content:
-            application/json:
-              schema:
-                type: object
-
-  /analytics/assets/proxy-hosts:
-    get:
-      tags: [Analytics]
-      summary: 按 Zabbix Proxy 查询主机明细
-      parameters:
-        - in: query
-          name: proxy
-          required: true
-          schema:
-            type: string
-        - in: query
-          name: keyword
-          schema:
-            type: string
-        - in: query
-          name: only_abnormal
-          schema:
-            type: boolean
-            default: false
-        - in: query
-          name: limit
-          schema:
-            type: integer
-            default: 50
-            minimum: 1
-            maximum: 200
-        - in: query
-          name: offset
-          schema:
-            type: integer
-            default: 0
-            minimum: 0
-      responses:
-        '200':
-          description: 主机明细
-          content:
-            application/json:
-              schema:
-                type: object
-
   /tools/definitions:
     get:
       tags: [Tools]
@@ -820,77 +737,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ToolDefinition'
-
-  /knowledge/articles:
-    get:
-      tags: [Knowledge]
-      summary: 搜索知识库文章
-      parameters:
-        - in: query
-          name: keyword
-          schema:
-            type: string
-        - in: query
-          name: tag
-          schema:
-            type: string
-      responses:
-        '200':
-          description: 搜索结果
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/KnowledgeArticle'
-    post:
-      tags: [Knowledge]
-      summary: 创建知识库文章
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/KnowledgeArticleCreate'
-      responses:
-        '201':
-          description: 创建成功
-
-  /knowledge/articles/{slug}:
-    get:
-      tags: [Knowledge]
-      summary: 获取知识库文章详情
-      parameters:
-        - in: path
-          name: slug
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: 文章详情
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/KnowledgeArticle'
-    put:
-      tags: [Knowledge]
-      summary: 更新知识库文章
-      parameters:
-        - in: path
-          name: slug
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/KnowledgeArticleCreate'
-      responses:
-        '200':
-          description: 更新成功
 
   /settings/plugins/:
     get:
@@ -1929,10 +1775,6 @@ components:
         script_version_id:
           type: string
           format: uuid
-        knowledge_slug:
-          type: string
-        knowledge_title:
-          type: string
     ToolExecution:
       type: object
       properties:
@@ -1957,106 +1799,6 @@ components:
         finished_at:
           type: string
           format: date-time
-    KnowledgeArticle:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        title:
-          type: string
-        slug:
-          type: string
-        category:
-          type: string
-        tags:
-          type: array
-          items:
-            type: string
-        content:
-          type: string
-        attachments:
-          type: array
-          items:
-            type: string
-        visibility_scope:
-          type: string
-        last_edited_at:
-          type: string
-          format: date-time
-    KnowledgeArticleCreate:
-      type: object
-      required: [title, slug, content]
-      properties:
-        title:
-          type: string
-        slug:
-          type: string
-        category:
-          type: string
-        tags:
-          type: array
-          items:
-            type: string
-        content:
-          type: string
-        attachments:
-          type: array
-          items:
-            type: string
-        visibility_scope:
-          type: string
-    KnowledgeArticle:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        title:
-          type: string
-        category:
-          type: string
-        tags:
-          type: array
-          items:
-            type: string
-        content:
-          type: string
-        visibility_scope:
-          type: string
-        last_edited_at:
-          type: string
-          format: date-time
-    KnowledgeArticleCreate:
-      type: object
-      required: [title, content, category]
-      properties:
-        title:
-          type: string
-        category:
-          type: string
-        tags:
-          type: array
-          items:
-            type: string
-        content:
-          type: string
-        visibility_scope:
-          type: string
-          enum: [public, internal, restricted]
-    KnowledgeArticleUpdate:
-      type: object
-      properties:
-        title:
-          type: string
-        tags:
-          type: array
-          items:
-            type: string
-        content:
-          type: string
-        visibility_scope:
-          type: string
     PluginConfig:
       type: object
       properties:

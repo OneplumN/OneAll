@@ -12,7 +12,6 @@ class SystemSettings(BaseModel):
     platform_logo = models.TextField(blank=True, default="")
     default_timezone = models.CharField(max_length=64, default="Asia/Shanghai")
     alert_escalation_threshold = models.PositiveIntegerField(default=60)
-    zabbix_dashboard_refresh_seconds = models.PositiveIntegerField(default=60, choices=[(value, value) for value in ZABBIX_REFRESH_INTERVALS])
     certificate_expiry_threshold_critical_days = models.PositiveIntegerField(default=15)
     certificate_expiry_threshold_warning_days = models.PositiveIntegerField(default=30)
     certificate_expiry_threshold_notice_days = models.PositiveIntegerField(default=45)

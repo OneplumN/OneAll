@@ -44,7 +44,7 @@ class DetectionScheduler:
         ]
         return suggestions
 
-    def guard_probe(self, probe: ProbeNode | None) -> None:
+    def guard_probe(self, probe: ProbeNode | None, protocol: str | None = None) -> None:
         if probe is None:
             return
 
@@ -53,6 +53,15 @@ class DetectionScheduler:
                 f"探针 {probe.name} 当前不可用（状态：{probe.get_status_display()}）",
                 suggestions=self._suggest_alternatives(probe),
             )
+
+        supported = probe.supported_protocols or []
+        if protocol and supported:
+            normalized = {str(item).upper() for item in supported if item}
+            if protocol.upper() not in normalized:
+                raise ProbeUnavailableError(
+                    f"探针 {probe.name} 不支持协议 {protocol}",
+                    suggestions=self._suggest_alternatives(probe),
+                )
 
         active = DetectionTask.objects.filter(
             probe=probe,

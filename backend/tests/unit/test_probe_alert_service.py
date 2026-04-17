@@ -54,8 +54,8 @@ def _create_execution(
 
 
 @pytest.mark.django_db
-@mock.patch("apps.probes.services.probe_alert_service._dispatch_to_channel")
-def test_alert_triggers_after_threshold(mock_dispatch, schedule, probe):
+@mock.patch("apps.probes.services.probe_alert_service.dispatch_alert_event.delay")
+def test_alert_triggers_after_threshold(mock_celery_delay, schedule, probe):
     AlertChannel.objects.create(
         channel_type="http",
         name="callback",
@@ -68,14 +68,12 @@ def test_alert_triggers_after_threshold(mock_dispatch, schedule, probe):
     probe_alert_service.evaluate_probe_alert(current)
 
     assert AuditLog.objects.filter(action="probes.alert").count() == 1
-    mock_dispatch.assert_called_once()
-    dispatched_channel = mock_dispatch.call_args[0][0]
-    assert isinstance(dispatched_channel, AlertChannel)
+    mock_celery_delay.assert_called_once()
 
 
 @pytest.mark.django_db
-@mock.patch("apps.probes.services.probe_alert_service._dispatch_to_channel")
-def test_alert_skipped_when_threshold_not_met(mock_dispatch, schedule, probe):
+@mock.patch("apps.probes.services.probe_alert_service.dispatch_alert_event.delay")
+def test_alert_skipped_when_threshold_not_met(mock_celery_delay, schedule, probe):
     metadata = dict(schedule.metadata or {})
     metadata["alert_threshold"] = 3
     schedule.metadata = metadata
@@ -86,12 +84,12 @@ def test_alert_skipped_when_threshold_not_met(mock_dispatch, schedule, probe):
     probe_alert_service.evaluate_probe_alert(current)
 
     assert AuditLog.objects.filter(action="probes.alert").count() == 0
-    mock_dispatch.assert_not_called()
+    mock_celery_delay.assert_not_called()
 
 
 @pytest.mark.django_db
-@mock.patch("apps.probes.services.probe_alert_service._dispatch_to_channel")
-def test_alert_not_duplicated_for_same_execution(mock_dispatch, schedule, probe):
+@mock.patch("apps.probes.services.probe_alert_service.dispatch_alert_event.delay")
+def test_alert_not_duplicated_for_same_execution(mock_celery_delay, schedule, probe):
     AlertChannel.objects.create(
         channel_type="http",
         name="callback",
@@ -105,12 +103,12 @@ def test_alert_not_duplicated_for_same_execution(mock_dispatch, schedule, probe)
     probe_alert_service.evaluate_probe_alert(current)
 
     assert AuditLog.objects.filter(action="probes.alert").count() == 1
-    mock_dispatch.assert_called_once()
+    mock_celery_delay.assert_called_once()
 
 
 @pytest.mark.django_db
-@mock.patch("apps.probes.services.probe_alert_service._dispatch_to_channel")
-def test_alert_record_includes_message(mock_dispatch, schedule, probe):
+@mock.patch("apps.probes.services.probe_alert_service.dispatch_alert_event.delay")
+def test_alert_record_includes_message(mock_celery_delay, schedule, probe):
     AlertChannel.objects.create(
         channel_type="email",
         name="mail",
@@ -128,3 +126,25 @@ def test_alert_record_includes_message(mock_dispatch, schedule, probe):
 
     entry = AuditLog.objects.filter(action="probes.alert").latest("created_at")
     assert "目标：" in entry.metadata.get("message", "")
+
+
+@pytest.mark.django_db
+@mock.patch("apps.probes.services.probe_alert_service.logger")
+@mock.patch("apps.probes.services.probe_alert_service.dispatch_alert_event.delay", side_effect=RuntimeError("redis down"))
+def test_alert_dispatch_enqueue_failure_does_not_break_evaluation(
+    mock_celery_delay,
+    mock_logger,
+    schedule,
+    probe,
+):
+    metadata = dict(schedule.metadata or {})
+    metadata["alert_threshold"] = 1
+    schedule.metadata = metadata
+    schedule.save(update_fields=["metadata"])
+
+    current = _create_execution(schedule, probe, minutes_ago=0, status=ProbeScheduleExecution.Status.FAILED)
+
+    probe_alert_service.evaluate_probe_alert(current)
+
+    assert AuditLog.objects.filter(action="probes.alert").count() == 1
+    mock_logger.exception.assert_called()

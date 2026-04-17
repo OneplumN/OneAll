@@ -26,6 +26,7 @@ type TaskResult struct {
 	StatusCode  int            `json:"status_code,omitempty"`
 	Metadata    map[string]any `json:"metadata,omitempty"`
 	ScheduledAt time.Time      `json:"scheduled_at"`
+	FinishedAt  time.Time      `json:"finished_at"`
 }
 
 // HeartbeatRequest is sent periodically so the controller knows probes are alive.
@@ -43,6 +44,8 @@ type MetricsPayload struct {
 	CapturedAt    time.Time           `json:"captured_at"`
 	UptimeSeconds int64               `json:"uptime_seconds"`
 	Heartbeats    MetricsHeartbeat    `json:"heartbeats"`
+	CPUUsage      float64             `json:"cpu_usage"`
+	MemoryUsageMB float64             `json:"memory_usage_mb"`
 	Tasks         MetricsTaskCounters `json:"tasks"`
 	Queue         MetricsQueueGauge   `json:"queue"`
 	Workers       MetricsWorkerGauge  `json:"workers"`

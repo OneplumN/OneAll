@@ -28,3 +28,14 @@ def get_integration_settings(section: str) -> dict:
     settings = get_system_settings()
     integrations = settings.integrations or {}
     return dict(integrations.get(section) or {})
+
+
+def update_integration_settings(section: str, payload: dict) -> dict:
+    settings = get_system_settings()
+    integrations = dict(settings.integrations or {})
+    current_section = dict(integrations.get(section) or {})
+    current_section.update(payload or {})
+    integrations[section] = current_section
+    settings.integrations = integrations
+    settings.save(update_fields=["integrations", "updated_at"])
+    return dict(current_section)

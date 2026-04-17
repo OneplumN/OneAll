@@ -11,6 +11,7 @@ from apps.monitoring.models import MonitoringRequest
 from apps.monitoring.serializers import MonitoringRequestSerializer
 from apps.monitoring.serializers.monitoring_request_serializer import MonitoringRequestUpdateSerializer
 from apps.monitoring.models.monitoring_job import MonitoringJob
+from apps.monitoring.services.monitoring_job_service import sync_job_from_request
 
 
 class MonitoringRequestDetailView(APIView):
@@ -47,6 +48,7 @@ class MonitoringRequestDetailView(APIView):
 
         # 已通过的申请：修改后立即生效（同步到 MonitoringJob -> ProbeSchedule -> 探针配置）
         if updated.status == MonitoringRequest.Status.APPROVED:
+            from apps.alerts.services import ensure_schedule_for_monitoring_job
             from apps.probes.services.probe_schedule_service import sync_schedule_from_job
             from apps.probes.services import schedule_config_service
 
@@ -56,9 +58,7 @@ class MonitoringRequestDetailView(APIView):
             probe_ids_to_refresh: set[str] = set()
 
             for job in jobs:
-                # frequency_minutes 的来源以 job 为准（sync_schedule_from_job 优先 job.frequency_minutes）
-                job.frequency_minutes = updated.frequency_minutes
-                job.save(update_fields=["frequency_minutes", "updated_at"])
+                sync_job_from_request(job, updated)
 
                 schedule = getattr(job, "probe_schedule", None)
                 if schedule:
@@ -66,6 +66,8 @@ class MonitoringRequestDetailView(APIView):
 
                 schedule = sync_schedule_from_job(job)
                 probe_ids_to_refresh.update(str(pid) for pid in schedule.probes.values_list("id", flat=True))
+
+                ensure_schedule_for_monitoring_job(job)
 
             if probe_ids_to_refresh:
                 schedule_config_service.request_probe_refresh(list(probe_ids_to_refresh))

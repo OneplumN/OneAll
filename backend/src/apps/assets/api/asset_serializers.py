@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from rest_framework import serializers
+from rest_framework.validators import UniqueTogetherValidator
 
 from apps.assets.models import AssetRecord
 
@@ -9,6 +10,8 @@ class AssetRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = AssetRecord
         fields = [
+            "created_at",
+            "updated_at",
             "id",
             "source",
             "external_id",
@@ -48,6 +51,13 @@ class AssetRecordCreateSerializer(serializers.ModelSerializer):
             "metadata": {"required": False},
             "sync_status": {"required": False},
         }
+        validators = [
+            UniqueTogetherValidator(
+                queryset=AssetRecord.objects.all(),
+                fields=["source", "external_id"],
+                message="创建失败：该资产已存在，请勿重复创建。可在资产列表中搜索并编辑已有资产。",
+            )
+        ]
 
     def to_internal_value(self, data):
         if isinstance(data, dict):

@@ -23,9 +23,21 @@ async def serve(
 ) -> None:
     server = grpc.aio.server(
         options=[
-            ("grpc.keepalive_time_ms", 20_000),
-            ("grpc.keepalive_timeout_ms", 5_000),
+            # Application heartbeats arrive every 30s, so the gateway does not need
+            # aggressive transport-level keepalive pings. Keep this very conservative
+            # to avoid server-initiated ping storms on fresh connections.
+            ("grpc.keepalive_time_ms", 600_000),
+            ("grpc.keepalive_timeout_ms", 20_000),
             ("grpc.keepalive_permit_without_calls", 1),
+            # Disable bandwidth-delay probe pings; they were observed to fire
+            # immediately after stream establishment and correlate with client resets.
+            ("grpc.http2.bdp_probe", 0),
+            # Allow client keepalive pings without data to prevent connection resets
+            ("grpc.http2.max_pings_without_data", 0),
+            ("grpc.http2.min_ping_interval_without_data_ms", 10_000),
+            # Disable ping strike enforcement; application heartbeats already provide
+            # active liveness and some client/server combinations proved overly strict.
+            ("grpc.http2.max_ping_strikes", 0),
         ],
         maximum_concurrent_rpcs=max_concurrent_rpcs,
     )

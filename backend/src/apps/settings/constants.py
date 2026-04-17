@@ -35,14 +35,6 @@ AVAILABLE_PERMISSIONS = [
         ],
     },
     {
-        "key": "analytics",
-        "label": "统计报表",
-        "children": [
-            {"key": "module", "label": "模块入口", "actions": ["access"]},
-            {"key": "reports", "label": "报表", "actions": ["view", "export", "schedule"]},
-        ],
-    },
-    {
         "key": "tools",
         "label": "工具与代码库",
         "children": [
@@ -52,28 +44,12 @@ AVAILABLE_PERMISSIONS = [
         ],
     },
     {
-        "key": "knowledge",
-        "label": "知识库",
-        "children": [
-            {"key": "module", "label": "模块入口", "actions": ["access"]},
-            {"key": "articles", "label": "文章", "actions": ["view", "create", "manage"]},
-        ],
-    },
-    {
         "key": "alerts",
         "label": "告警",
         "children": [
             {"key": "module", "label": "模块入口", "actions": ["access"]},
             {"key": "channels", "label": "通道配置", "actions": ["view", "update", "test"]},
             {"key": "templates", "label": "通知模板", "actions": ["view", "create", "update", "delete"]},
-        ],
-    },
-    {
-        "key": "integrations",
-        "label": "集成中心",
-        "children": [
-            {"key": "module", "label": "模块入口", "actions": ["access"]},
-            {"key": "hub", "label": "插件中心", "actions": ["view", "toggle", "configure"]},
         ],
     },
     {

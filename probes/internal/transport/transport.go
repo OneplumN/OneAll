@@ -11,6 +11,8 @@ import (
 type Transport interface {
 	SendHeartbeat(ctx context.Context, payload api.HeartbeatRequest) error
 	FetchTasks(ctx context.Context, limit int) ([]api.Task, error)
+	Tasks() <-chan api.Task
+	AcknowledgeTask(ctx context.Context, taskID string) error
 	SubmitResult(ctx context.Context, result api.TaskResult) error
 	PublishMetrics(ctx context.Context, payload api.MetricsPayload) error
 	Close() error

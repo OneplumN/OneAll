@@ -8,13 +8,13 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.assets.models import AssetRecord
-from apps.core.models import AuditLog
+from apps.core.models import AuditLog, Role
 from apps.monitoring.models import DetectionTask, MonitoringJob, MonitoringRequest
 from apps.probes.models import ProbeNode
 from apps.settings.models import PluginConfig
+from apps.settings.utils import get_all_permissions
 from apps.tools.services.script_repository import ScriptRepositoryService
 from apps.tools.models import ScriptVersion, ToolDefinition
-from apps.knowledge.models import KnowledgeArticle
 
 
 class Command(BaseCommand):
@@ -34,12 +34,24 @@ class Command(BaseCommand):
         self._ensure_plugin_configs(admin_user)
         self._ensure_assets(admin_user)
         self._ensure_audit_logs(admin_user)
-        self._ensure_tools_and_knowledge(admin_user)
+        self._ensure_tools(admin_user)
 
         self.stdout.write(self.style.SUCCESS("Demo data ready."))
 
     def _ensure_demo_user(self):
         User = get_user_model()
+        all_permissions = sorted(get_all_permissions())
+        admin_role, _ = Role.objects.get_or_create(
+            name="系统管理员",
+            defaults={
+                "description": "拥有全部权限，可管理系统参数、探针与集成",
+                "permissions": all_permissions,
+            },
+        )
+        if sorted(admin_role.permissions or []) != all_permissions:
+            admin_role.permissions = all_permissions
+            admin_role.save(update_fields=["permissions"])
+
         user, created = User.objects.get_or_create(
             username="demo-admin",
             defaults={
@@ -55,6 +67,8 @@ class Command(BaseCommand):
             self.stdout.write(" - 创建演示用户 demo-admin / Demo@1234")
         else:
             self.stdout.write(" - 演示用户已存在")
+
+        user.roles.set([admin_role])
         return user
 
     def _ensure_probes(self, admin_user):
@@ -315,7 +329,7 @@ class Command(BaseCommand):
             )
         self.stdout.write(" - 写入审计日志样例")
 
-    def _ensure_tools_and_knowledge(self, admin_user):
+    def _ensure_tools(self, admin_user):
         repository_service = ScriptRepositoryService(actor=admin_user)
         tool, _ = ToolDefinition.objects.get_or_create(
             name="http-status-checker",
@@ -347,15 +361,4 @@ def main(url: str):
             )
             self.stdout.write(" - 新增工具 http-status-checker")
 
-        KnowledgeArticle.objects.get_or_create(
-            slug="http-status-checker-guide",
-            defaults={
-                "title": "HTTP 状态巡检脚本使用说明",
-                "category": "工具库",
-                "tags": ["工具", "http"],
-                "content": "演示脚本用于检测指定 URL 的状态码及耗时。",
-                "created_by": admin_user,
-                "last_editor": admin_user,
-            },
-        )
-        self.stdout.write(" - 创建知识库示例文章")
+        # 知识库模块已从 v2 中移除，这里不再创建示例知识库文章。

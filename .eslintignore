@@ -1,0 +1,7 @@
+dist/
+build/
+node_modules/
+coverage/
+*.config.js
+*.config.cjs
+**/._*

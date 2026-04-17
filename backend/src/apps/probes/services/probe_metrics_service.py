@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Optional
 
 from django.utils import timezone
 
@@ -9,6 +9,7 @@ from apps.probes.models import ProbeNode
 from apps.probes.repositories.metrics_queries import (
     fetch_result_buckets,
     fetch_runtime_timeseries,
+    fetch_latest_uptime,
 )
 from apps.probes.repositories.runtime_metrics import insert_runtime_snapshot
 
@@ -22,10 +23,16 @@ def record_runtime_snapshot(*, probe: ProbeNode, payload: dict[str, Any]) -> Non
     queue = payload.get("queue") or {}
     workers = payload.get("workers") or {}
 
+    runtime = probe.runtime_metrics or {}
+    cpu_usage = runtime.get("cpu_usage")
+    memory_usage_mb = runtime.get("memory_usage_mb")
+
     insert_runtime_snapshot(
         probe_id=probe.id,
         node_name=probe.name,
         uptime_seconds=payload.get("uptime_seconds", 0),
+        cpu_usage=cpu_usage,
+        memory_usage_mb=memory_usage_mb,
         heartbeats_sent=heartbeats.get("sent", 0),
         heartbeats_failed=heartbeats.get("failed", 0),
         heartbeats_last_success=heartbeats.get("last_success"),
@@ -49,6 +56,8 @@ def get_runtime_history(*, probe_id: str, hours: int, interval_minutes: int) -> 
         "points": [
             {
                 "timestamp": point.timestamp,
+                "cpu_usage": point.cpu_usage,
+                "memory_usage_mb": point.memory_usage_mb,
                 "queue_depth": point.queue_depth,
                 "active_workers": point.active_workers,
                 "tasks_executed": point.tasks_executed,
@@ -90,3 +99,9 @@ def get_result_statistics(*, probe_id: str, hours: int, interval_minutes: int) -
             "avg_latency_ms": avg_latency,
         },
     }
+
+
+def get_latest_uptime(*, probe_id: str) -> Optional[int]:
+    """Return latest uptime_seconds value for the probe, if recorded."""
+
+    return fetch_latest_uptime(probe_id=probe_id)

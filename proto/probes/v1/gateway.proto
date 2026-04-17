@@ -90,6 +90,11 @@ message TaskResult {
   google.protobuf.Timestamp scheduled_at = 10;
 }
 
+message TaskAck {
+  string task_id = 1;
+  google.protobuf.Timestamp received_at = 2;
+}
+
 message ControlCommand {
   string command = 1;
   google.protobuf.Struct payload = 2;
@@ -128,6 +133,7 @@ message ProbeMessage {
     TaskPullRequest task_request = 4;
     RuntimeMetrics metrics = 5;
     ConfigAck config_ack = 6;
+    TaskAck task_ack = 7;
   }
 }
 
