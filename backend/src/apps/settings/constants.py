@@ -39,8 +39,8 @@ AVAILABLE_PERMISSIONS = [
         "label": "工具与代码库",
         "children": [
             {"key": "module", "label": "模块入口", "actions": ["access"]},
-            {"key": "library", "label": "工具库", "actions": ["view", "create", "manage"]},
-            {"key": "repository", "label": "代码库", "actions": ["view", "create", "manage"]},
+            {"key": "library", "label": "工具库", "actions": ["view", "create", "manage", "execute"]},
+            {"key": "repository", "label": "代码库", "actions": ["view", "create", "manage", "execute"]},
         ],
     },
     {

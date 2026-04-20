@@ -155,7 +155,7 @@
                   type="primary"
                   link
                   class="oa-table-action oa-table-action--success"
-                  :disabled="!canManage"
+                  :disabled="!canExecute"
                   @click="handleExecute(row)"
                 >
                   {{ t('tools.execute') }}
@@ -334,6 +334,7 @@ import { useToolLibraryPage } from '@/features/tools/composables/useToolLibraryP
 
 const {
   canCreate,
+  canExecute,
   canManage,
   categoryOptions,
   createDialogVisible,

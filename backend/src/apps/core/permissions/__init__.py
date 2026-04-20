@@ -13,7 +13,6 @@ PERMISSION_ALIASES: dict[str, str] = {
     "probes.nodes.rotate_token": "probes.nodes.manage",
     "assets.records.sync": "assets.records.manage",
     "assets.records.export": "assets.records.view",
-    "tools.library.execute": "tools.library.manage",
     "tools.repository.commit": "tools.repository.create",
     "tools.repository.rollback": "tools.repository.manage",
     "settings.system.update": "settings.system.manage",

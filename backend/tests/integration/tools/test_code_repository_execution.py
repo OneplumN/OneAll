@@ -12,7 +12,7 @@ from apps.tools.models import CodeDirectory, CodeRepository, CodeRepositoryVersi
 def api_client():
     user_model = get_user_model()
     user = user_model.objects.create_user(username='repo-admin', password='password')
-    role = Role.objects.create(name='repo-admin-role', permissions=['tools.repository.manage'])
+    role = Role.objects.create(name='repo-admin-role', permissions=['tools.repository.execute'])
     user.roles.set([role])
     client = APIClient()
     client.force_authenticate(user=user)

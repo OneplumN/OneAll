@@ -2,6 +2,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from
 import { ElMessage } from 'element-plus';
 
 import { usePageTitle } from '@/composables/usePageTitle';
+import { useSessionStore } from '@/app/stores/session';
 import { copyTextWithFallback } from '@/shared/utils/clipboard';
 import {
   executeScriptPlugin,
@@ -23,6 +24,7 @@ type ScrollbarLike = {
 } | null;
 
 export function useGrafanaSyncPage() {
+  const sessionStore = useSessionStore();
   const loading = ref(false);
   const saving = ref(false);
   const running = ref(false);
@@ -120,8 +122,14 @@ export function useGrafanaSyncPage() {
   const isGrafanaReady = computed(() =>
     Boolean(formValues.grafana_url && (formValues.grafana_token || secretState.grafana_token_set))
   );
-  const canSave = computed(() => Boolean(plugin.value) && isZabbixReady.value && isGrafanaReady.value);
-  const canRun = computed(() => isZabbixReady.value && isGrafanaReady.value);
+  const canSave = computed(
+    () =>
+      sessionStore.hasPermission('tools.library.manage') &&
+      Boolean(plugin.value) &&
+      isZabbixReady.value &&
+      isGrafanaReady.value
+  );
+  const canRun = computed(() => sessionStore.hasPermission('tools.library.execute') && isZabbixReady.value && isGrafanaReady.value);
 
   const buildConfigPayload = () => {
     const payload: Record<string, string> = { ...formValues };
@@ -168,6 +176,10 @@ export function useGrafanaSyncPage() {
   };
 
   const handleRun = async () => {
+    if (!sessionStore.hasPermission('tools.library.execute')) {
+      ElMessage.warning('暂无脚本执行权限');
+      return;
+    }
     if (!validateForm()) return;
     running.value = true;
     try {

@@ -4,6 +4,7 @@ from rest_framework import serializers
 
 from apps.core.models.user import Role, User
 from apps.settings.models import AlertTemplate, PluginConfig, SystemSettings
+from apps.settings.security import mask_sensitive_config, merge_sensitive_config
 from apps.settings.services.alert_channel_service import CHANNEL_DEFINITIONS
 from apps.settings.services.template_renderer import ALERT_VARIABLES, validate_alert_template
 from apps.settings.utils import build_permission_catalog, get_all_permissions
@@ -115,6 +116,25 @@ class PluginConfigSerializer(serializers.ModelSerializer):
             "last_message",
         ]
         read_only_fields = ["id", "status", "last_checked_at", "last_message"]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["config"] = mask_sensitive_config(instance.config or {})
+        return data
+
+    def create(self, validated_data):
+        config = validated_data.pop("config", {})
+        validated_data["config"] = merge_sensitive_config({}, config)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        config = validated_data.pop("config", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if config is not None:
+            instance.config = merge_sensitive_config(instance.config, config)
+        instance.save()
+        return instance
 
 
 class RoleSerializer(serializers.ModelSerializer):

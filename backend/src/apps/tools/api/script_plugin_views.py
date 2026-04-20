@@ -48,7 +48,7 @@ class ScriptPluginDetailView(APIView):
 
 
 class ScriptPluginExecuteView(APIView):
-    permission_classes = [permissions.IsAuthenticated, RequirePermission("tools.library.manage")]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("tools.library.execute")]
 
     def post(self, request: Request, slug: str) -> Response:
         plugin = get_object_or_404(ScriptPlugin.objects.select_related("repository", "repository_version"), slug=slug)

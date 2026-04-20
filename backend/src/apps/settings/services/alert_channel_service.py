@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Dict, List
 
 from django.utils import timezone
 
 from apps.core.models import AuditLog, User
 from apps.settings.models import AlertChannel
+from apps.settings.security import mask_sensitive_config, merge_sensitive_config
 from apps.tools.models import CodeRepository
 
 
@@ -110,13 +110,14 @@ def update_channel(
     meta: Dict[str, Any],
 ) -> Dict[str, Any]:
     definition = _get_definition(channel_type)
+    sensitive_keys = _channel_sensitive_keys(definition)
     channel, _ = AlertChannel.objects.get_or_create(
         channel_type=channel_type,
         defaults={"name": definition["name"]},
     )
     channel.enabled = bool(enabled)
     channel.name = definition["name"]
-    channel.config = config or {}
+    channel.config = merge_sensitive_config(channel.config, config or {}, extra_keys=sensitive_keys)
     channel.updated_by = actor
     channel.save()
     AuditLog.objects.create(
@@ -153,18 +154,28 @@ def test_channel(*, channel_type: str, actor: User | None, meta: Dict[str, Any])
 
 
 def _serialize_channel(channel: AlertChannel, definition: Dict[str, Any]) -> Dict[str, Any]:
+    sensitive_keys = _channel_sensitive_keys(definition)
     return {
         "id": str(channel.id),
         "type": channel.channel_type,
         "name": definition["name"],
         "description": definition.get("description", ""),
         "enabled": channel.enabled,
-        "config": channel.config or {},
+        "config": mask_sensitive_config(channel.config or {}, extra_keys=sensitive_keys),
         "config_schema": definition.get("fields", []),
         "last_test_status": channel.last_test_status,
         "last_test_at": channel.last_test_at.isoformat() if channel.last_test_at else None,
         "last_test_message": channel.last_test_message,
     }
+
+
+def _channel_sensitive_keys(definition: Dict[str, Any]) -> set[str]:
+    sensitive_keys = {"webhook_url", "url", "headers"}
+    for field in definition.get("fields", []):
+        key = str(field.get("key") or "").strip()
+        if key and field.get("type") == "secret":
+            sensitive_keys.add(key)
+    return sensitive_keys
 
 
 def _evaluate_channel(channel: AlertChannel) -> Dict[str, str]:

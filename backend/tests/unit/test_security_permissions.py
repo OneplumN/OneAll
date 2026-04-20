@@ -4,11 +4,13 @@ import uuid
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.core.models import AuditLog
 from apps.core.models.user import Role
+from apps.settings.models import AlertChannel, PluginConfig
 from apps.tools.models import CodeDirectory, CodeRepository
 
 
@@ -143,6 +145,164 @@ def test_code_repository_update_allows_owner_and_blocks_non_owner_without_manage
         format="json",
     )
     assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_code_repository_execute_requires_explicit_execute_permission():
+    owner = _make_user_with_permissions("repo-exec-owner", "tools.repository.create")
+    executor = _make_user_with_permissions("repo-executor", "tools.repository.execute")
+    directory = CodeDirectory.objects.create(key="ops-exec", title="Ops Execute", created_by=owner)
+    repository = CodeRepository.objects.create(
+        name="ops-exec-script",
+        language="python",
+        tags=[],
+        description="desc",
+        directory=directory,
+        content="print('hi')",
+        created_by=owner,
+        updated_by=owner,
+    )
+    repository.versions.create(version="v1.0.0", summary="init", change_log="", content="print('hi')", created_by=owner)
+    repository.latest_version = repository.versions.first()
+    repository.save(update_fields=["latest_version"])
+
+    client = APIClient()
+    client.force_authenticate(user=owner)
+    response = client.post(
+        reverse("code-repository-execute", kwargs={"repository_id": repository.id}),
+        {"parameters": {}},
+        format="json",
+    )
+    assert response.status_code == 403
+
+    client.force_authenticate(user=executor)
+    response = client.post(
+        reverse("code-repository-execute", kwargs={"repository_id": repository.id}),
+        {"parameters": {}},
+        format="json",
+    )
+    assert response.status_code == 202
+
+
+@pytest.mark.django_db
+def test_alert_channel_list_masks_sensitive_config_fields():
+    AlertChannel.objects.create(
+        channel_type="wecom",
+        name="企业微信机器人",
+        enabled=True,
+        config={
+            "webhook_url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=secret",
+            "secret": "wecom-secret",
+            "mentions": "13800000000",
+        },
+    )
+
+    client = APIClient()
+    viewer = _make_user_with_permissions("channel-viewer", "alerts.channels.view")
+    client.force_authenticate(user=viewer)
+    response = client.get(reverse("alert-channel-list"))
+
+    assert response.status_code == 200
+    channels = response.json()["channels"]
+    wecom_channel = next(item for item in channels if item["type"] == "wecom")
+    assert wecom_channel["config"]["webhook_url"] == "******"
+    assert wecom_channel["config"]["secret"] == "******"
+    assert wecom_channel["config"]["mentions"] == "13800000000"
+
+
+@pytest.mark.django_db
+def test_alert_channel_update_preserves_masked_sensitive_values():
+    channel = AlertChannel.objects.create(
+        channel_type="http",
+        name="HTTP 回调",
+        enabled=True,
+        config={
+            "url": "https://internal.example.com/hook",
+            "headers": '{"Authorization":"Bearer abc"}',
+            "body_template": '{"status":"ok"}',
+        },
+    )
+
+    client = APIClient()
+    manager = _make_user_with_permissions("channel-manager", "alerts.channels.update")
+    client.force_authenticate(user=manager)
+    response = client.put(
+        reverse("alert-channel-update", kwargs={"channel_type": channel.channel_type}),
+        {
+            "enabled": True,
+            "config": {
+                "url": "******",
+                "headers": "******",
+                "body_template": '{"status":"changed"}',
+            },
+        },
+        format="json",
+    )
+
+    assert response.status_code == 200
+    channel.refresh_from_db()
+    assert channel.config["url"] == "https://internal.example.com/hook"
+    assert channel.config["headers"] == '{"Authorization":"Bearer abc"}'
+    assert channel.config["body_template"] == '{"status":"changed"}'
+
+
+@pytest.mark.django_db
+def test_plugin_config_list_masks_sensitive_fields_and_patch_preserves_placeholder():
+    plugin = PluginConfig.objects.create(
+        name="监控插件",
+        type="monitoring_overview",
+        enabled=True,
+        config={
+            "webhook": "https://hooks.internal/plugin",
+            "token": "plugin-secret-token",
+            "remark": "visible",
+        },
+    )
+
+    client = APIClient()
+    viewer = _make_user_with_permissions("system-viewer", "settings.system.view")
+    client.force_authenticate(user=viewer)
+    response = client.get(reverse("plugin-config-list"))
+    assert response.status_code == 200
+    record = next(item for item in response.json() if item["id"] == str(plugin.id))
+    assert record["config"]["webhook"] == "******"
+    assert record["config"]["token"] == "******"
+    assert record["config"]["remark"] == "visible"
+
+    manager = _make_user_with_permissions("system-manager", "settings.system.manage")
+    client.force_authenticate(user=manager)
+    response = client.patch(
+        reverse("plugin-config-detail", kwargs={"pk": plugin.id}),
+        {
+            "config": {
+                "webhook": "******",
+                "token": "******",
+                "remark": "updated",
+            }
+        },
+        format="json",
+    )
+    assert response.status_code == 200
+    plugin.refresh_from_db()
+    assert plugin.config["webhook"] == "https://hooks.internal/plugin"
+    assert plugin.config["token"] == "plugin-secret-token"
+    assert plugin.config["remark"] == "updated"
+
+
+@pytest.mark.django_db
+@override_settings(PROBE_BOOTSTRAP_TOKEN=None)
+def test_probe_registration_requires_configured_bootstrap_token():
+    client = APIClient()
+    response = client.post(
+        reverse("probe-register"),
+        {
+            "hostname": "probe-shanghai",
+            "network_type": "internal",
+            "supported_protocols": ["HTTP"],
+        },
+        format="json",
+    )
+    assert response.status_code == 403
 
 
 @pytest.mark.django_db

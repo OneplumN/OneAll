@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-const AUTH_TOKEN_KEY = 'oneall_access_token';
-const USER_PROFILE_KEY = 'oneall_user_profile';
+import { getAccessToken, setAccessToken as setSharedAccessToken } from '@/app/auth/accessToken';
+
 let redirectingToLogin = false;
 
 function isLocalHostname(host?: string) {
@@ -49,7 +49,7 @@ const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  const token = getAccessToken();
   if (token) {
     config.headers = config.headers ?? {};
     config.headers.Authorization = `Bearer ${token}`;
@@ -57,9 +57,12 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-function clearAuthStorage() {
-  localStorage.removeItem(AUTH_TOKEN_KEY);
-  localStorage.removeItem(USER_PROFILE_KEY);
+export function applyApiClientAccessToken(token: string | null) {
+  if (token) {
+    apiClient.defaults.headers.common.Authorization = `Bearer ${token}`;
+    return;
+  }
+  delete apiClient.defaults.headers.common.Authorization;
 }
 
 function redirectToLogin() {
@@ -97,7 +100,8 @@ apiClient.interceptors.response.use(
       // 避免对登录/个人信息接口循环跳转
       const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/profile') || url.includes('/auth/me');
       if (!isAuthEndpoint && (status === 401 || (status === 403 && isAuthErrorDetail(detail)))) {
-        clearAuthStorage();
+        setSharedAccessToken(null);
+        applyApiClientAccessToken(null);
         redirectToLogin();
       }
     }

@@ -2,9 +2,12 @@ import axios from 'axios';
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 
-import apiClient from '@/app/api/apiClient';
-
-const USER_STORAGE_KEY = 'oneall_user_profile';
+import apiClient, { applyApiClientAccessToken } from '@/app/api/apiClient';
+import {
+  getAccessToken as getSharedAccessToken,
+  setAccessToken as setSharedAccessToken,
+  subscribeAccessToken,
+} from '@/app/auth/accessToken';
 
 interface LoginPayload {
   username: string;
@@ -32,11 +35,16 @@ export interface SessionUser {
 }
 
 export const useSessionStore = defineStore('session', () => {
-  const accessToken = ref<string | null>(localStorage.getItem('oneall_access_token'));
-  applyAuthHeader(accessToken.value);
-
-  const user = ref<SessionUser | null>(loadStoredUser());
+  const accessToken = ref<string | null>(getSharedAccessToken());
+  const user = ref<SessionUser | null>(null);
   const loading = ref(false);
+
+  subscribeAccessToken((token) => {
+    accessToken.value = token;
+    if (!token) {
+      user.value = null;
+    }
+  });
 
   const isAuthenticated = computed(() => Boolean(accessToken.value));
   const permissionSet = computed(() => new Set(user.value?.permissions ?? []));
@@ -57,14 +65,8 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   function setAccessToken(token: string | null) {
-    accessToken.value = token;
-    if (token) {
-      localStorage.setItem('oneall_access_token', token);
-    } else {
-      localStorage.removeItem('oneall_access_token');
-      localStorage.removeItem(USER_STORAGE_KEY);
-    }
-    applyAuthHeader(token);
+    setSharedAccessToken(token);
+    applyApiClientAccessToken(token);
   }
 
   async function fetchProfile() {
@@ -72,7 +74,6 @@ export const useSessionStore = defineStore('session', () => {
     try {
       const { data } = await apiClient.get<SessionUser>('/auth/profile');
       user.value = data;
-      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data));
     } catch (error: any) {
       const status = axios.isAxiosError(error) ? error.response?.status : undefined;
       if (status === 401 || status === 403) {
@@ -88,7 +89,6 @@ export const useSessionStore = defineStore('session', () => {
   function logout() {
     setAccessToken(null);
     user.value = null;
-    localStorage.removeItem(USER_STORAGE_KEY);
   }
 
   return {
@@ -115,27 +115,3 @@ export const useSessionStore = defineStore('session', () => {
     return false;
   }
 });
-
-function applyAuthHeader(token: string | null) {
-  if (token) {
-    apiClient.defaults.headers.common.Authorization = `Bearer ${token}`;
-  } else {
-    delete apiClient.defaults.headers.common.Authorization;
-  }
-}
-
-function loadStoredUser(): SessionUser | null {
-  try {
-    const raw = localStorage.getItem(USER_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<SessionUser>;
-    if (!parsed || typeof parsed !== 'object') return null;
-    if (!Array.isArray(parsed.permissions) || !Array.isArray(parsed.roles)) return null;
-    if (typeof parsed.id !== 'string' || typeof parsed.username !== 'string') return null;
-    return parsed as SessionUser;
-  } catch (error) {
-    console.warn('Failed to parse stored user profile.', error);
-    localStorage.removeItem(USER_STORAGE_KEY);
-    return null;
-  }
-}

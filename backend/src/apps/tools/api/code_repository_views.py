@@ -172,11 +172,10 @@ class CodeRepositoryVersionRollbackView(APIView):
 
 
 class CodeRepositoryExecuteView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("tools.repository.execute")]
 
     def post(self, request: Request, repository_id: str) -> Response:
         repository = get_object_or_404(CodeRepository, id=repository_id)
-        CodeRepositoryDetailView._ensure_repo_manage_scope(request, repository)
         parameters = request.data.get("parameters") or {}
         service = RepositoryExecutionService(actor=request.user)
         try:

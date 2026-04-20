@@ -2,6 +2,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from
 import { ElMessage } from 'element-plus';
 
 import { usePageTitle } from '@/composables/usePageTitle';
+import { useSessionStore } from '@/app/stores/session';
 import { copyTextWithFallback } from '@/shared/utils/clipboard';
 import {
   executeScriptPlugin,
@@ -23,6 +24,7 @@ type ScrollbarLike = {
 } | null;
 
 export function useAccountSyncPage() {
+  const sessionStore = useSessionStore();
   const loading = ref(false);
   const saving = ref(false);
   const running = ref(false);
@@ -136,8 +138,10 @@ export function useAccountSyncPage() {
   const isZabbixReady = computed(() =>
     Boolean(formValues.zabbix_url && (formValues.zabbix_token || secretState.zabbix_token_set))
   );
-  const canSave = computed(() => Boolean(plugin.value) && isLdapReady.value && isZabbixReady.value);
-  const canRun = computed(() => isLdapReady.value && isZabbixReady.value);
+  const canSave = computed(
+    () => sessionStore.hasPermission('tools.library.manage') && Boolean(plugin.value) && isLdapReady.value && isZabbixReady.value
+  );
+  const canRun = computed(() => sessionStore.hasPermission('tools.library.execute') && isLdapReady.value && isZabbixReady.value);
 
   const validateForm = () => {
     if (
@@ -190,6 +194,10 @@ export function useAccountSyncPage() {
   };
 
   const handleRun = async () => {
+    if (!sessionStore.hasPermission('tools.library.execute')) {
+      ElMessage.warning('暂无脚本执行权限');
+      return;
+    }
     if (!validateForm()) return;
     running.value = true;
     try {

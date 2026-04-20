@@ -5,6 +5,7 @@ from importlib import import_module
 from pathlib import Path
 
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 from core.settings.env_loader import load_env
 
@@ -12,7 +13,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 env = environ.Env(
     DEBUG=(bool, False),
-    SECRET_KEY=(str, "oneall-secret-key"),
+    SECRET_KEY=(str, ""),
     ITSM_CALLBACK_SECRET=(str, ""),
     PROBE_BOOTSTRAP_TOKEN=(str, ""),
     ALLOWED_HOSTS=(list[str], ["localhost", "127.0.0.1"]),
@@ -27,7 +28,9 @@ env = environ.Env(
 load_env()
 
 CONSOLE_BASE_URL = env("CONSOLE_BASE_URL", default="")
-SECRET_KEY = env("SECRET_KEY")
+SECRET_KEY = env("SECRET_KEY", default="").strip()
+if not SECRET_KEY:
+    raise ImproperlyConfigured("SECRET_KEY 未配置，服务拒绝启动。")
 ITSM_CALLBACK_SECRET = env("ITSM_CALLBACK_SECRET", default="")
 PROBE_BOOTSTRAP_TOKEN = env("PROBE_BOOTSTRAP_TOKEN", default="").strip() or None
 DEBUG = env("DEBUG")

@@ -6,7 +6,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.core.permissions import RequireAnyPermission, RequirePermission
+from apps.core.permissions import RequirePermission
 from apps.tools.api.serializers import (
     ScriptVersionCreateSerializer,
     ToolCreateSerializer,
@@ -56,7 +56,7 @@ class ToolScriptVersionCreateView(APIView):
 
 
 class ToolExecuteView(APIView):
-    permission_classes = [permissions.IsAuthenticated, RequireAnyPermission("tools.library.manage", "tools.library.execute")]
+    permission_classes = [permissions.IsAuthenticated, RequirePermission("tools.library.execute")]
 
     def post(self, request: Request, tool_id: str) -> Response:
         tool = get_object_or_404(ToolDefinition, id=tool_id)

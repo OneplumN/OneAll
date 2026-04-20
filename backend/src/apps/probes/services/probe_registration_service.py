@@ -21,11 +21,13 @@ def _get_bootstrap_token() -> str | None:
 
 def validate_bootstrap_token(candidate: str) -> None:
     expected = _get_bootstrap_token()
-    # 开发环境：如果未配置 PROBE_BOOTSTRAP_TOKEN，则不强制校验，引导 token 逻辑关闭。
     if not expected:
-        return
+        from rest_framework.exceptions import PermissionDenied  # lazy import
+
+        raise PermissionDenied("Probe bootstrap token is not configured")
     if not candidate or candidate != expected:
         from rest_framework.exceptions import PermissionDenied  # lazy import
+
         raise PermissionDenied("Invalid probe bootstrap token")
 
 

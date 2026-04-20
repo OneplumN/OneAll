@@ -18,6 +18,7 @@ export function useToolLibraryPage() {
   const sessionStore = useSessionStore();
   const canCreate = computed(() => sessionStore.hasPermission('tools.library.create'));
   const canManage = computed(() => sessionStore.hasPermission('tools.library.manage'));
+  const canExecute = computed(() => sessionStore.hasPermission('tools.library.execute'));
 
   const tools = ref<ToolDefinition[]>([]);
   const loading = reactive({
@@ -153,8 +154,8 @@ export function useToolLibraryPage() {
   };
 
   const handleExecute = async (tool: ToolDefinition) => {
-    if (!canManage.value) {
-      ElMessage.warning('暂无管理权限');
+    if (!canExecute.value) {
+      ElMessage.warning('暂无执行权限');
       return;
     }
     executingTool.value = tool;
@@ -184,6 +185,7 @@ export function useToolLibraryPage() {
 
   return {
     canCreate,
+    canExecute,
     canManage,
     categoryOptions,
     createDialogVisible,
