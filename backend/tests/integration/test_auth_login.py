@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import pytest
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
@@ -36,3 +39,29 @@ def test_login_invalid_credentials():
     response = client.post("/api/auth/login", {"username": "admin", "password": "wrong"}, format="json")
     assert response.status_code == 401
     assert response.json()["detail"] == "Invalid credentials"
+
+
+@pytest.mark.django_db
+def test_login_is_throttled_after_repeated_failures():
+    User.objects.create_user(username="admin", password="admin123")
+    client = APIClient()
+    cache.clear()
+
+    throttled_settings = {
+        **settings.REST_FRAMEWORK,
+        "DEFAULT_THROTTLE_RATES": {
+            **settings.REST_FRAMEWORK.get("DEFAULT_THROTTLE_RATES", {}),
+            "login_ip": "2/minute",
+            "login_username": "2/minute",
+        },
+    }
+
+    with override_settings(REST_FRAMEWORK=throttled_settings):
+        response = client.post("/api/auth/login", {"username": "admin", "password": "wrong"}, format="json")
+        assert response.status_code == 401
+
+        response = client.post("/api/auth/login", {"username": "admin", "password": "wrong"}, format="json")
+        assert response.status_code == 401
+
+        response = client.post("/api/auth/login", {"username": "admin", "password": "wrong"}, format="json")
+        assert response.status_code == 429

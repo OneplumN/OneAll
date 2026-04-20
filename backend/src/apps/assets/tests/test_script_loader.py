@@ -50,16 +50,35 @@ def test_save_sync_script(tmp_path, monkeypatch):
 
 
 def test_load_sync_script_syntax_error(tmp_path, monkeypatch):
-  # Arrange: write a script with a syntax error and ensure we raise a generic exception from upload API.
-  scripts_root = tmp_path / "scripts"
-  scripts_root.mkdir()
-  monkeypatch.setattr(script_loader, "SCRIPTS_ROOT", scripts_root, raising=True)
+    scripts_root = tmp_path / "scripts"
+    scripts_root.mkdir()
+    monkeypatch.setattr(script_loader, "SCRIPTS_ROOT", scripts_root, raising=True)
 
-  script_id = "bad"
-  script_file = scripts_root / f"{script_id}.py"
-  # invalid Python
-  script_file.write_text("def run(context):\n    return [\n", encoding="utf-8")
+    script_id = "bad"
+    script_file = scripts_root / f"{script_id}.py"
+    script_file.write_text("def run(context):\n    return [\n", encoding="utf-8")
 
-  # Act & Assert: load_sync_script should raise a Python exception (SyntaxError wrapped by import machinery)
-  with pytest.raises(Exception):
-      script_loader.load_sync_script(script_id)
+    with pytest.raises(script_loader.ScriptLoadError, match="语法错误"):
+        script_loader.load_sync_script(script_id)
+
+
+def test_load_sync_script_rejects_top_level_execution(tmp_path, monkeypatch):
+    scripts_root = tmp_path / "scripts"
+    scripts_root.mkdir()
+    monkeypatch.setattr(script_loader, "SCRIPTS_ROOT", scripts_root, raising=True)
+
+    marker_path = tmp_path / "executed.txt"
+    script_id = "unsafe"
+    script_file = scripts_root / f"{script_id}.py"
+    script_file.write_text(
+        "from pathlib import Path\n"
+        f"Path({str(marker_path)!r}).write_text('boom', encoding='utf-8')\n"
+        "def run(context):\n"
+        "    return []\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(script_loader.ScriptLoadError, match="模块顶层执行代码"):
+        script_loader.load_sync_script(script_id)
+
+    assert not marker_path.exists()

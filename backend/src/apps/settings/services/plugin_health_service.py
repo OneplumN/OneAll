@@ -7,6 +7,7 @@ import logging
 
 import requests
 
+from apps.core.outbound import UnsafeOutboundURLError, validate_outbound_hook_url
 from apps.settings.models import PluginConfig
 
 
@@ -23,7 +24,10 @@ def _dispatch_failure_webhook(plugin: PluginConfig, payload: Dict[str, Any]) -> 
         return
 
     try:
+        validate_outbound_hook_url(str(webhook_url), resolve_dns=True)
         requests.post(webhook_url, json=payload, timeout=5)
+    except UnsafeOutboundURLError as exc:
+        logger.warning("Skipped unsafe plugin failure webhook: %s", exc)
     except requests.RequestException as exc:  # pragma: no cover - network failures
         logger.warning("Failed to send plugin failure webhook: %s", exc)
 

@@ -14,6 +14,7 @@ from rest_framework.views import APIView
 from core.auth.ldap_client import authenticate_via_ldap
 from apps.core.models import AuditLog
 from apps.settings.services.ldap_service import assign_default_roles
+from apps.core.throttling import LoginIPThrottle, LoginUsernameThrottle
 from core.auth.jwt import JWTAuthentication, generate_access_token
 from apps.core.permissions import get_user_permissions
 from apps.core.roles import get_primary_role
@@ -31,6 +32,7 @@ class LoginView(APIView):
 
     permission_classes = [AllowAny]
     authentication_classes: list[type] = []
+    throttle_classes = [LoginIPThrottle, LoginUsernameThrottle]
 
     def post(self, request: Request) -> Response:
         serializer = LoginSerializer(data=request.data)

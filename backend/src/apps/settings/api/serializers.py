@@ -3,6 +3,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from apps.core.models.user import Role, User
+from apps.core.outbound import UnsafeOutboundURLError, validate_outbound_hook_url
 from apps.settings.models import AlertTemplate, PluginConfig, SystemSettings
 from apps.settings.security import mask_sensitive_config, merge_sensitive_config
 from apps.settings.services.alert_channel_service import CHANNEL_DEFINITIONS
@@ -124,7 +125,9 @@ class PluginConfigSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         config = validated_data.pop("config", {})
-        validated_data["config"] = merge_sensitive_config({}, config)
+        merged_config = merge_sensitive_config({}, config)
+        self._validate_plugin_config(merged_config)
+        validated_data["config"] = merged_config
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
@@ -132,9 +135,21 @@ class PluginConfigSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         if config is not None:
-            instance.config = merge_sensitive_config(instance.config, config)
+            merged_config = merge_sensitive_config(instance.config, config)
+            self._validate_plugin_config(merged_config)
+            instance.config = merged_config
         instance.save()
         return instance
+
+    @staticmethod
+    def _validate_plugin_config(config: dict) -> None:
+        webhook = str((config or {}).get("webhook") or "").strip()
+        if not webhook:
+            return
+        try:
+            validate_outbound_hook_url(webhook, resolve_dns=False)
+        except UnsafeOutboundURLError as exc:
+            raise serializers.ValidationError({"config": [str(exc)]}) from exc
 
 
 class RoleSerializer(serializers.ModelSerializer):

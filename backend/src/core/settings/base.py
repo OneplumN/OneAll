@@ -20,9 +20,12 @@ env = environ.Env(
     LANGUAGE_CODE=(str, "zh-hans"),
     TIME_ZONE=(str, "Asia/Shanghai"),
     JWT_ACCESS_TOKEN_TTL_SECONDS=(int, 86400),
+    LOGIN_IP_THROTTLE_RATE=(str, "10/minute"),
+    LOGIN_USERNAME_THROTTLE_RATE=(str, "5/minute"),
     IP_REGEX_MAX_RESULTS=(int, 2000),
     IP_REGEX_PLUGIN_SLUG=(str, "ip-regex-helper"),
     CONSOLE_BASE_URL=(str, ""),
+    ALLOW_PRIVATE_OUTBOUND_HOOK_URLS=(bool, False),
 )
 
 load_env()
@@ -42,9 +45,12 @@ USE_I18N = True
 USE_TZ = True
 
 JWT_ACCESS_TOKEN_TTL_SECONDS = env("JWT_ACCESS_TOKEN_TTL_SECONDS", default=86400)
+LOGIN_IP_THROTTLE_RATE = env("LOGIN_IP_THROTTLE_RATE", default="10/minute")
+LOGIN_USERNAME_THROTTLE_RATE = env("LOGIN_USERNAME_THROTTLE_RATE", default="5/minute")
 
 IP_REGEX_MAX_RESULTS = env("IP_REGEX_MAX_RESULTS", default=2000)
 IP_REGEX_PLUGIN_SLUG = env("IP_REGEX_PLUGIN_SLUG", default="ip-regex-helper")
+ALLOW_PRIVATE_OUTBOUND_HOOK_URLS = env.bool("ALLOW_PRIVATE_OUTBOUND_HOOK_URLS", default=False)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -114,6 +120,10 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "DEFAULT_THROTTLE_RATES": {
+        "login_ip": LOGIN_IP_THROTTLE_RATE,
+        "login_username": LOGIN_USERNAME_THROTTLE_RATE,
+    },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 

@@ -15,6 +15,7 @@ from typing import Mapping, Sequence
 import requests
 from django.conf import settings
 
+from apps.core.outbound import validate_outbound_hook_url
 from apps.alerts.models import AlertEvent
 from apps.settings.models import AlertChannel, AlertTemplate
 from apps.settings.services.template_renderer import AlertTemplateError, render_alert_template
@@ -218,6 +219,7 @@ def _send_wecom(channel: AlertChannel, subject: str, body: str, contacts: Sequen
     webhook = config.get("webhook_url")
     if not webhook:
         raise ValueError("企业微信 webhook 未配置")
+    validate_outbound_hook_url(str(webhook), resolve_dns=True)
     payload = {
         "msgtype": "text",
         "text": {
@@ -234,6 +236,7 @@ def _send_dingtalk(channel: AlertChannel, subject: str, body: str, contacts: Seq
     webhook = config.get("webhook_url")
     if not webhook:
         raise ValueError("钉钉 webhook 未配置")
+    validate_outbound_hook_url(str(webhook), resolve_dns=True)
     payload = {
         "msgtype": "text",
         "text": {"content": f"{subject}\n{body}"},
@@ -251,6 +254,7 @@ def _send_lark(channel: AlertChannel, subject: str, body: str) -> None:
     webhook = config.get("webhook_url")
     if not webhook:
         raise ValueError("飞书 webhook 未配置")
+    validate_outbound_hook_url(str(webhook), resolve_dns=True)
     payload = {
         "msg_type": "text",
         "content": {"text": f"{subject}\n{body}"},
@@ -270,6 +274,9 @@ def _send_http_callback(
     method = str(config.get("method") or "POST").upper()
     if not url:
         raise ValueError("HTTP 回调 URL 未配置")
+    if method not in {"POST", "GET", "PUT"}:
+        raise ValueError("HTTP 回调仅支持 GET / POST / PUT")
+    validate_outbound_hook_url(str(url), resolve_dns=True)
 
     headers: dict[str, str] = {}
     raw_headers = config.get("headers")

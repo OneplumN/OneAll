@@ -87,3 +87,40 @@ def test_upload_invalid_script_rejected(tmp_path, monkeypatch):
     refreshed = AssetModel.objects.get(pk=model.pk)
     assert not refreshed.script_id
 
+
+@pytest.mark.django_db
+def test_upload_script_with_top_level_side_effect_is_rejected_without_execution(tmp_path, monkeypatch):
+    user = _make_user_with_perm("asset_model_admin5", "assets.records.manage")
+
+    scripts_root = tmp_path / "scripts"
+    monkeypatch.setattr(script_loader, "SCRIPTS_ROOT", scripts_root, raising=True)
+    marker_path = tmp_path / "executed.txt"
+
+    model = AssetModel.objects.create(
+        key="unsafe-model",
+        label="危险脚本模型",
+        category="cmdb",
+        fields=[{"key": "field1", "label": "字段1", "type": "string"}],
+        unique_key=["field1"],
+    )
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    url = reverse("assets-model-script", kwargs={"model_id": str(model.id)})
+    content = (
+        "from pathlib import Path\n"
+        f"Path({str(marker_path)!r}).write_text('boom', encoding='utf-8')\n"
+        "def run(context):\n"
+        "    return []\n"
+    ).encode("utf-8")
+    file_obj = io.BytesIO(content)
+    file_obj.name = "script.py"
+
+    resp = client.post(url, {"file": file_obj}, format="multipart")
+    assert resp.status_code == 400
+    assert "模块顶层执行代码" in resp.json().get("detail", "")
+    assert not marker_path.exists()
+
+    refreshed = AssetModel.objects.get(pk=model.pk)
+    assert not refreshed.script_id

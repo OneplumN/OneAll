@@ -24,13 +24,16 @@ class AlertChannelUpdateView(APIView):
         payload = request.data or {}
         enabled = payload.get("enabled", False)
         config = payload.get("config") or {}
-        record = alert_channel_service.update_channel(
-            channel_type=channel_type,
-            enabled=enabled,
-            config=config,
-            actor=request.user,
-            meta={"ip": request.META.get("REMOTE_ADDR"), "ua": request.META.get("HTTP_USER_AGENT", "")},
-        )
+        try:
+            record = alert_channel_service.update_channel(
+                channel_type=channel_type,
+                enabled=enabled,
+                config=config,
+                actor=request.user,
+                meta={"ip": request.META.get("REMOTE_ADDR"), "ua": request.META.get("HTTP_USER_AGENT", "")},
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(record)
 
 

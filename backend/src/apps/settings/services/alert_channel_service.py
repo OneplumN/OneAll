@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, List
 
 from django.utils import timezone
 
 from apps.core.models import AuditLog, User
+from apps.core.outbound import UnsafeOutboundURLError, validate_outbound_hook_url
 from apps.settings.models import AlertChannel
 from apps.settings.security import mask_sensitive_config, merge_sensitive_config
 from apps.tools.models import CodeRepository
@@ -117,7 +119,9 @@ def update_channel(
     )
     channel.enabled = bool(enabled)
     channel.name = definition["name"]
-    channel.config = merge_sensitive_config(channel.config, config or {}, extra_keys=sensitive_keys)
+    merged_config = merge_sensitive_config(channel.config, config or {}, extra_keys=sensitive_keys)
+    _validate_channel_config(channel_type, merged_config)
+    channel.config = merged_config
     channel.updated_by = actor
     channel.save()
     AuditLog.objects.create(
@@ -176,6 +180,30 @@ def _channel_sensitive_keys(definition: Dict[str, Any]) -> set[str]:
         if key and field.get("type") == "secret":
             sensitive_keys.add(key)
     return sensitive_keys
+
+
+def _validate_channel_config(channel_type: str, config: Dict[str, Any]) -> None:
+    if channel_type == "http":
+        method = str(config.get("method") or "POST").upper()
+        if method not in {"POST", "GET", "PUT"}:
+            raise ValueError("HTTP 回调仅支持 GET / POST / PUT")
+        raw_headers = config.get("headers")
+        if raw_headers:
+            try:
+                parsed_headers = json.loads(str(raw_headers))
+            except json.JSONDecodeError as exc:
+                raise ValueError("HTTP 回调 Headers 必须是合法 JSON") from exc
+            if not isinstance(parsed_headers, dict):
+                raise ValueError("HTTP 回调 Headers 必须是 JSON 对象")
+
+    for key in ("webhook_url", "url"):
+        target = str(config.get(key) or "").strip()
+        if not target:
+            continue
+        try:
+            validate_outbound_hook_url(target, resolve_dns=False)
+        except UnsafeOutboundURLError as exc:
+            raise ValueError(str(exc)) from exc
 
 
 def _evaluate_channel(channel: AlertChannel) -> Dict[str, str]:

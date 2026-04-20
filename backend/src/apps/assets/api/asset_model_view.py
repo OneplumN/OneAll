@@ -13,7 +13,7 @@ from django.http import HttpResponse
 
 from apps.assets.models import AssetModel
 from apps.assets.services import script_loader
-from apps.assets.services.script_loader import ScriptLoadError, load_sync_script, save_sync_script
+from apps.assets.services.script_loader import ScriptLoadError, save_sync_script, validate_sync_script_source
 from apps.core.permissions import RequirePermission
 
 
@@ -154,16 +154,20 @@ class AssetModelScriptUploadView(APIView):
             )
 
         script_id = model.key
+        saved_path = None
         try:
-            save_sync_script(script_id, file_obj)
-            # Validate that script is importable and exposes run(context)
-            load_sync_script(script_id)
+            saved_path = save_sync_script(script_id, file_obj)
+            validate_sync_script_source(script_id, saved_path.read_text(encoding="utf-8"))
         except (ValueError, ScriptLoadError) as exc:
+            if saved_path and saved_path.exists():
+                saved_path.unlink(missing_ok=True)
             return Response(
                 {"detail": f"脚本校验失败：{exc}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         except Exception as exc:  # pragma: no cover - defensive guard for unexpected import errors
+            if saved_path and saved_path.exists():
+                saved_path.unlink(missing_ok=True)
             logger.exception("Failed to validate sync script", extra={"model_id": str(model.id), "script_id": script_id})
             return Response(
                 {"detail": f"脚本校验失败：{exc.__class__.__name__}: {exc}"},

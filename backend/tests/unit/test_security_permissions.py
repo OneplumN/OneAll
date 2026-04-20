@@ -247,6 +247,34 @@ def test_alert_channel_update_preserves_masked_sensitive_values():
 
 
 @pytest.mark.django_db
+def test_alert_channel_update_rejects_private_callback_url():
+    channel = AlertChannel.objects.create(
+        channel_type="http",
+        name="HTTP 回调",
+        enabled=True,
+        config={},
+    )
+
+    client = APIClient()
+    manager = _make_user_with_permissions("channel-manager-private", "alerts.channels.update")
+    client.force_authenticate(user=manager)
+    response = client.put(
+        reverse("alert-channel-update", kwargs={"channel_type": channel.channel_type}),
+        {
+            "enabled": True,
+            "config": {
+                "url": "http://127.0.0.1:8080/internal",
+                "method": "POST",
+            },
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert "不能指向内网" in response.json()["detail"]
+
+
+@pytest.mark.django_db
 def test_plugin_config_list_masks_sensitive_fields_and_patch_preserves_placeholder():
     plugin = PluginConfig.objects.create(
         name="监控插件",
@@ -287,6 +315,32 @@ def test_plugin_config_list_masks_sensitive_fields_and_patch_preserves_placehold
     assert plugin.config["webhook"] == "https://hooks.internal/plugin"
     assert plugin.config["token"] == "plugin-secret-token"
     assert plugin.config["remark"] == "updated"
+
+
+@pytest.mark.django_db
+def test_plugin_config_update_rejects_private_webhook():
+    plugin = PluginConfig.objects.create(
+        name="Webhook 插件",
+        type="monitoring_overview",
+        enabled=True,
+        config={},
+    )
+
+    client = APIClient()
+    manager = _make_user_with_permissions("system-manager-private", "settings.system.manage")
+    client.force_authenticate(user=manager)
+    response = client.patch(
+        reverse("plugin-config-detail", kwargs={"pk": plugin.id}),
+        {
+            "config": {
+                "webhook": "http://127.0.0.1:9000/hook",
+            }
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert "不能指向内网" in str(response.json())
 
 
 @pytest.mark.django_db
