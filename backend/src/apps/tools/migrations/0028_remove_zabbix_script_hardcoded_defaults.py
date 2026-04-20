@@ -233,7 +233,7 @@ def update_script(apps, schema_editor):
 
     version = CodeRepositoryVersion.objects.create(
         repository=repo,
-        version=timezone.now().strftime("zabbix-sync-sanitized-%Y%m%d%H%M%S%f"),
+        version=timezone.now().strftime("zbx-sync-sanitized-%Y%m%d%H%M%S"),
         summary="移除 Zabbix 默认地址与默认 Token",
         change_log="要求通过 CONFIG 或环境变量显式提供 Zabbix API URL/Token，并清洗历史版本中的硬编码默认值。",
         content=SCRIPT_BODY,
