@@ -14,6 +14,10 @@ api_token: ""
 # 可选引导 Token（后端配置 PROBE_BOOTSTRAP_TOKEN 时，可通过 PROBE_BOOTSTRAP_TOKEN 环境变量覆盖）
 bootstrap_token: ""
 
+# 节点展示信息（也可通过 PROBE_LOCATION / PROBE_NETWORK_TYPE 环境变量覆盖）
+location: "Docker Probe"
+network_type: "internal"
+
 # gRPC 网关地址
 grpc_gateway: "grpc-gateway:50051"
 

@@ -180,8 +180,9 @@ export const ASSET_VIEW_DEFINITIONS: Record<AssetViewKey, AssetViewDefinition> =
     pluginType: 'asset_zabbix_host',
     integrationInfo: {
       summary:
-        'Zabbix 采集脚本输出主机列表，可通过 ASSET_SYNC_ZABBIX_FILE 覆盖默认样例。',
+        'Zabbix 内置采集器需通过 ASSET_SYNC_ZABBIX_FILE 显式提供主机列表。',
       envVar: 'ASSET_SYNC_ZABBIX_FILE',
+      note: '未配置该文件时，平台不会再回退导入默认样例数据。',
     },
     columns: [
       { key: 'ip', label: 'IP 地址', minWidth: 160 },

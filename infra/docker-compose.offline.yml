@@ -1,5 +1,44 @@
 version: '3.9'
 
+x-backend-env: &backend-env
+  DEBUG: "False"
+  SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
+  ITSM_CALLBACK_SECRET: ${ITSM_CALLBACK_SECRET:-change-this-callback-secret}
+  PROBE_BOOTSTRAP_TOKEN: ${PROBE_BOOTSTRAP_TOKEN:-}
+  CONSOLE_BASE_URL: ${CONSOLE_BASE_URL:-http://localhost}
+  DJANGO_DATABASE_MODULE: core.settings.database
+  USE_TIMESCALE: "1"
+  ALLOWED_HOSTS: "*"
+  MYSQL_HOST: mysql
+  MYSQL_PORT: 3306
+  MYSQL_DB: oneall
+  MYSQL_USER: root
+  MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-oneall123}
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/1
+  TIMESCALE_HOST: timescaledb
+  TIMESCALE_PORT: 5432
+  TIMESCALE_DB: oneall_metrics
+  TIMESCALE_USER: postgres
+  TIMESCALE_PASSWORD: ${TIMESCALE_PASSWORD:-oneall123}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:80}
+
+x-backend-depends: &backend-depends
+  mysql:
+    condition: service_healthy
+  timescaledb:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+
+x-backend-healthcheck: &backend-healthcheck
+  test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/admin/login/ >/dev/null || exit 1"]
+  interval: 15s
+  timeout: 5s
+  retries: 10
+  start_period: 20s
+
 services:
   mysql:
     image: mysql:8.0
@@ -58,37 +97,12 @@ services:
     container_name: oneall-backend
     restart: unless-stopped
     environment:
-      DEBUG: "False"
-      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
-      ITSM_CALLBACK_SECRET: ${ITSM_CALLBACK_SECRET:-change-this-callback-secret}
-      PROBE_BOOTSTRAP_TOKEN: ${PROBE_BOOTSTRAP_TOKEN:-}
-      CONSOLE_BASE_URL: ${CONSOLE_BASE_URL:-http://localhost}
-      DJANGO_DATABASE_MODULE: core.settings.database
-      USE_TIMESCALE: "1"
-      ALLOWED_HOSTS: "*"
-      MYSQL_HOST: mysql
-      MYSQL_PORT: 3306
-      MYSQL_DB: oneall
-      MYSQL_USER: root
-      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-oneall123}
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
-      TIMESCALE_HOST: timescaledb
-      TIMESCALE_PORT: 5432
-      TIMESCALE_DB: oneall_metrics
-      TIMESCALE_USER: postgres
-      TIMESCALE_PASSWORD: ${TIMESCALE_PASSWORD:-oneall123}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:80}
+      <<: *backend-env
     expose:
       - "8000"
     depends_on:
-      mysql:
-        condition: service_healthy
-      timescaledb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      <<: *backend-depends
+    healthcheck: *backend-healthcheck
     command: >
       sh -c "
         python manage.py migrate --noinput &&
@@ -100,30 +114,17 @@ services:
     container_name: oneall-grpc-gateway
     restart: unless-stopped
     environment:
-      DEBUG: "False"
-      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
-      DJANGO_DATABASE_MODULE: core.settings.database
-      USE_TIMESCALE: "1"
-      MYSQL_HOST: mysql
-      MYSQL_PORT: 3306
-      MYSQL_DB: oneall
-      MYSQL_USER: root
-      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-oneall123}
-      REDIS_URL: redis://redis:6379/0
-      TIMESCALE_HOST: timescaledb
-      TIMESCALE_PORT: 5432
-      TIMESCALE_DB: oneall_metrics
-      TIMESCALE_USER: postgres
-      TIMESCALE_PASSWORD: ${TIMESCALE_PASSWORD:-oneall123}
+      <<: *backend-env
     ports:
       - "50051:50051"
     depends_on:
-      mysql:
-        condition: service_healthy
-      timescaledb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      <<: *backend-depends
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s = socket.create_connection(('127.0.0.1', 50051), 2); s.close()\""]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
     command: ["python", "manage.py", "run_probe_gateway", "--host", "0.0.0.0", "--port", "50051"]
 
   celery-worker:
@@ -131,27 +132,10 @@ services:
     container_name: oneall-celery-worker
     restart: unless-stopped
     environment:
-      DEBUG: "False"
-      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
-      DJANGO_DATABASE_MODULE: core.settings.database
-      USE_TIMESCALE: "1"
-      MYSQL_HOST: mysql
-      MYSQL_PORT: 3306
-      MYSQL_DB: oneall
-      MYSQL_USER: root
-      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-oneall123}
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
-      TIMESCALE_HOST: timescaledb
-      TIMESCALE_PORT: 5432
-      TIMESCALE_DB: oneall_metrics
-      TIMESCALE_USER: postgres
-      TIMESCALE_PASSWORD: ${TIMESCALE_PASSWORD:-oneall123}
+      <<: *backend-env
     depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
+      <<: *backend-depends
+      backend:
         condition: service_healthy
     command: ["celery", "-A", "core.celery_app", "worker", "-l", "info"]
 
@@ -160,27 +144,10 @@ services:
     container_name: oneall-celery-beat
     restart: unless-stopped
     environment:
-      DEBUG: "False"
-      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
-      DJANGO_DATABASE_MODULE: core.settings.database
-      USE_TIMESCALE: "1"
-      MYSQL_HOST: mysql
-      MYSQL_PORT: 3306
-      MYSQL_DB: oneall
-      MYSQL_USER: root
-      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-oneall123}
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
-      TIMESCALE_HOST: timescaledb
-      TIMESCALE_PORT: 5432
-      TIMESCALE_DB: oneall_metrics
-      TIMESCALE_USER: postgres
-      TIMESCALE_PASSWORD: ${TIMESCALE_PASSWORD:-oneall123}
+      <<: *backend-env
     depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
+      <<: *backend-depends
+      backend:
         condition: service_healthy
     command: ["celery", "-A", "core.celery_app", "beat", "-l", "info"]
 
@@ -191,7 +158,14 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   probe:
     image: ${ONEALL_PROBE_IMAGE}
@@ -204,12 +178,26 @@ services:
       PROBE_BOOTSTRAP_TOKEN: ${PROBE_BOOTSTRAP_TOKEN:-}
       PROBE_NODE_ID: ${PROBE_NODE_ID:-}
       PROBE_API_TOKEN: ${PROBE_API_TOKEN:-}
+      PROBE_LOCATION: ${PROBE_LOCATION:-Docker Probe}
+      PROBE_NETWORK_TYPE: ${PROBE_NETWORK_TYPE:-internal}
+      PROBE_METRICS_ADDR: ${PROBE_METRICS_ADDR:-:9100}
+      PROBE_RESULT_CACHE_PATH: /var/lib/oneall-probe/cache/results.json
+      PROBE_SCHEDULE_STORE_PATH: /var/lib/oneall-probe/state/schedules.json
+      PROBE_UPDATE_DIR: /var/lib/oneall-probe/updates
     volumes:
       - ./probe/probe-config.yaml:/app/config.yaml:ro
       - probe_data:/var/lib/oneall-probe
     depends_on:
-      - backend
-      - grpc-gateway
+      backend:
+        condition: service_healthy
+      grpc-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9100/metrics || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
     profiles:
       - probe
 

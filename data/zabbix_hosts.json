@@ -1,8 +1,8 @@
 [
   {
     "source": "Zabbix",
-    "external_id": "zbx:10084",
-    "name": "Zabbix server",
+    "external_id": "zbx:demo-zabbix-server",
+    "name": "Demo Zabbix Server",
     "system_name": "",
     "status": "disabled",
     "metadata": {
@@ -10,16 +10,16 @@
       "host_status": "1",
       "host_status_label": "停用",
       "status": "1",
-      "host_id": "10084",
-      "host_name": "Zabbix server",
+      "host_id": "20001",
+      "host_name": "demo-zabbix-server",
       "host_groups": [
         "Zabbix servers"
       ],
-      "ip": "127.0.0.1",
+      "ip": "192.0.2.10",
       "interfaces": [
         {
-          "interfaceid": "1",
-          "ip": "127.0.0.1",
+          "interfaceid": "20001",
+          "ip": "192.0.2.10",
           "available": "2",
           "type": "1",
           "port": "10050",
@@ -35,23 +35,23 @@
   },
   {
     "source": "Zabbix",
-    "external_id": "zbx:10634",
-    "name": "txy",
+    "external_id": "zbx:demo-proxy-bj",
+    "name": "Demo Proxy BJ",
     "system_name": "",
     "status": "synced",
     "metadata": {
       "asset_type": "zabbix-host",
-      "host_id": "10634",
-      "host_name": "txy",
+      "host_id": "20002",
+      "host_name": "demo-proxy-bj",
       "host_groups": [
         "Discovered hosts",
         "Zabbix servers"
       ],
-      "ip": "101.43.54.131",
+      "ip": "198.51.100.21",
       "interfaces": [
         {
-          "interfaceid": "31",
-          "ip": "101.43.54.131",
+          "interfaceid": "20002",
+          "ip": "198.51.100.21",
           "available": "1",
           "type": "1",
           "port": "10050",
@@ -67,22 +67,22 @@
   },
   {
     "source": "Zabbix",
-    "external_id": "zbx:10635",
-    "name": "aliyun",
+    "external_id": "zbx:demo-proxy-sh",
+    "name": "Demo Proxy SH",
     "system_name": "",
     "status": "synced",
     "metadata": {
       "asset_type": "zabbix-host",
-      "host_id": "10635",
-      "host_name": "aliyun",
+      "host_id": "20003",
+      "host_name": "demo-proxy-sh",
       "host_groups": [
-        "test"
+        "demo"
       ],
-      "ip": "119.23.146.171",
+      "ip": "203.0.113.34",
       "interfaces": [
         {
-          "interfaceid": "32",
-          "ip": "119.23.146.171",
+          "interfaceid": "20003",
+          "ip": "203.0.113.34",
           "available": "1",
           "type": "1",
           "port": "10050",

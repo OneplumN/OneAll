@@ -244,6 +244,7 @@ infra/
 
 ### 1. 准备环境
 
+- 构建机需安装可用的 Docker 运行环境（Docker Engine 或 Docker Desktop）
 - Docker 24+
 - Docker Compose v2+
 
@@ -289,6 +290,9 @@ CONSOLE_BASE_URL=http://localhost
 PROBE_BOOTSTRAP_TOKEN=
 PROBE_NODE_ID=
 PROBE_API_TOKEN=
+PROBE_LOCATION=Docker Probe
+PROBE_NETWORK_TYPE=internal
+PROBE_METRICS_ADDR=:9100
 ```
 
 说明：
@@ -296,12 +300,36 @@ PROBE_API_TOKEN=
 - `PROBE_BOOTSTRAP_TOKEN` 仅在后端启用了引导校验时需要填写。
 - `PROBE_NODE_ID` / `PROBE_API_TOKEN` 留空时，probe 会在首次启动时自动注册，并把凭据持久化到 `probe_data` 卷。
 - 如果你想复用已有节点，再手动填写 `PROBE_NODE_ID` / `PROBE_API_TOKEN`。
+- `PROBE_LOCATION` / `PROBE_NETWORK_TYPE` 会作为自动注册后的节点展示信息。
+- `PROBE_METRICS_ADDR` 默认暴露为 `:9100`，如有端口冲突可在 `.env` 中覆盖。
 
 启动探针服务：
 
 ```bash
 docker compose -f infra/docker-compose.yml --profile probe up -d
 ```
+
+### 7. 为麒麟 x86 打离线镜像包（可选）
+
+如果你需要把当前版本发布到麒麟 `x86_64` / `amd64` 内网环境，推荐在一台能访问外网镜像源的机器上执行：
+
+```bash
+scripts/package_kylin_amd64_images.sh
+```
+
+说明：
+
+- 脚本会强制按 `linux/amd64` 构建，避免产出非麒麟 `x86_64` 目标环境可用的其他架构镜像
+- 默认按 `docker.aityp.com` 当前展示的镜像映射规则，优先从：
+  - `swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/...`
+  拉取基础镜像和依赖镜像
+- 输出目录默认在：
+  - `.tmp/docker-export/oneall-kylin-x86-<gitsha>/`
+- 目录里会包含：
+  - 离线镜像包 `oneall-images-<gitsha>-linux-amd64.tar`
+  - 内网启动用的 `docker-compose.offline.yml`
+  - `offline.env`
+  - `LOAD_AND_RUN.md`
 
 ---
 
@@ -442,6 +470,7 @@ pytest
 | `TIMESCALE_HOST` / `TIMESCALE_PORT` / `TIMESCALE_DB` / `TIMESCALE_USER` / `TIMESCALE_PASSWORD` | 时序库 |
 | `CORS_ALLOWED_ORIGINS` | 前端跨域地址 |
 | `CONSOLE_BASE_URL` | 控制台访问地址 |
+| `PROBE_BOOTSTRAP_TOKEN` | Probe 自动注册引导 Token，未配置时注册接口默认关闭校验 |
 
 可选外部集成：
 
@@ -450,6 +479,12 @@ pytest
 | `ZABBIX_API_URL` | Zabbix API 地址 |
 | `ZABBIX_API_TOKEN` | Zabbix Token |
 | `ZABBIX_VERIFY_TLS` | 是否校验 TLS |
+| `ASSET_SYNC_ZABBIX_FILE` | Zabbix embedded 采集器读取的主机清单 JSON 文件 |
+
+说明：
+
+- Zabbix 脚本仓库模式不再内置默认地址或默认 Token，需通过配置或环境变量显式提供。
+- 资产中心 `/assets/zabbix` 的 embedded 采集器也不再回退默认样例；如需同步主机数据，请显式提供 `ASSET_SYNC_ZABBIX_FILE`。
 
 ### 前端配置
 
@@ -536,6 +571,7 @@ WantedBy=multi-user.target
 - 后端镜像：`infra/backend.Dockerfile`
 - 探针镜像：`infra/probe.Dockerfile`
 - 一键编排：[`infra/docker-compose.yml`](./infra/docker-compose.yml)
+- 麒麟 x86 离线部署编排：[`infra/docker-compose.offline.yml`](./infra/docker-compose.offline.yml)
 
 ### 生产最小组件
 
@@ -559,6 +595,53 @@ WantedBy=multi-user.target
 - Redis / MySQL / TimescaleDB 使用独立持久化卷或独立实例
 - 对外暴露 `80/443`
 - 探针所在网络需能访问后端 API 与 gRPC 端口
+
+### 麒麟 x86 离线部署
+
+如果目标环境无法直接访问外网镜像仓库，建议使用离线镜像包流程：
+
+1. 在有外网的构建机上运行：
+
+```bash
+scripts/package_kylin_amd64_images.sh
+```
+
+2. 把导出的目录整体带到内网机器。
+
+3. 在内网机器导入镜像：
+
+```bash
+docker load -i oneall-images-<gitsha>-linux-amd64.tar
+```
+
+4. 准备环境文件：
+
+```bash
+cp .env.example .env
+cp offline.env .env.images
+```
+
+5. 启动核心服务：
+
+```bash
+docker compose --env-file .env --env-file .env.images -f docker-compose.offline.yml up -d
+```
+
+6. 如需启动 probe：
+
+```bash
+docker compose --env-file .env --env-file .env.images -f docker-compose.offline.yml --profile probe up -d
+```
+
+补充：
+
+- 离线包脚本会校验所有镜像必须是 `linux/amd64`
+- `docker-compose.offline.yml` 只引用镜像，不依赖内网重新构建
+- 如镜像代理前缀调整，可通过环境变量覆盖：
+
+```bash
+AITYP_MIRROR_PREFIX=<你的镜像前缀> scripts/package_kylin_amd64_images.sh
+```
 
 ---
 

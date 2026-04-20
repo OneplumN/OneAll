@@ -10,7 +10,7 @@
         "host_status": "0",
         "host_status_label": "启用",
         "status": "0",
-        "ip": "10.12.8.21",
+        "ip": "192.0.2.21",
         "host_name": "redis-master",
         "host_groups": ["cache", "production"],
         "proxy": "beijing-proxy",
@@ -19,7 +19,7 @@
         "interface_available": "1",
         "interface_available_label": "可用",
       "primary_interface": {
-        "ip": "10.12.8.21",
+        "ip": "192.0.2.21",
         "port": "10050",
         "type": "1",
         "type_label": "Agent",
@@ -28,7 +28,7 @@
       },
       "interfaces": [
         {
-          "ip": "10.12.8.21",
+          "ip": "192.0.2.21",
           "type": "1",
           "available": "1",
           "port": "10050"
@@ -47,7 +47,7 @@
       "host_status": "1",
       "host_status_label": "停用",
       "status": "1",
-      "ip": "10.13.5.11",
+      "ip": "198.51.100.11",
       "host_name": "web-node-01",
       "host_groups": ["web", "blue-team"],
       "proxy": "shanghai-proxy",
@@ -56,7 +56,7 @@
       "interface_available": "2",
       "interface_available_label": "不可用",
       "primary_interface": {
-        "ip": "10.13.5.11",
+        "ip": "198.51.100.11",
         "port": "10050",
         "type": "1",
         "type_label": "Agent",
@@ -65,7 +65,7 @@
       },
       "interfaces": [
         {
-          "ip": "10.13.5.11",
+          "ip": "198.51.100.11",
           "type": "1",
           "available": "2",
           "port": "10050"
