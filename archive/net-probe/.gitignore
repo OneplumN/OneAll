@@ -1,0 +1,10 @@
+node_modules/
+dist/
+output/
+.openai/
+.env
+.env.*
+!.env.example
+.DS_Store
+._*
+oneall-api/data/oneall-state.json

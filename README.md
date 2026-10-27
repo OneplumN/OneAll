@@ -1,3 +1,6 @@
+> 本分支为历史归档分支 `archive/net-probe-2026-10-27`，不作为发布或持续开发主线。
+> 本次 React / Ant Design 重构已于 2026-10-27 停止开发。代码、设计与归档说明见 [archive/net-probe/README.md](archive/net-probe/README.md)。以下保留旧平台原 README。
+
 <div align="center">
 
 # OneAll
